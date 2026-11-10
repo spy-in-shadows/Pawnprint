@@ -1,0 +1,37 @@
+{
+  "name": "longitudinal-chess-analytics-engine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Longitudinal Chess Analytics Engine: Stockfish-evaluated games in a normalized PostgreSQL schema",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "worker": "node src/worker.js",
+    "test": "vitest run --passWithNoTests",
+    "test:watch": "vitest",
+    "seed": "node prisma/seed/index.js",
+    "bench": "node scripts/benchmarkInsert.js",
+    "bench:throughput": "node scripts/benchmarkThroughput.js",
+    "bench:queries": "node scripts/benchmarkQueries.js",
+    "import:puzzles": "node scripts/importPuzzles.js",
+    "dq": "node scripts/dataQuality.js",
+    "build:client": "npm --prefix client run build"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "bcrypt": "^6.0.0",
+    "chess.js": "^1.4.0",
+    "dotenv": "^18.0.10",
+    "express": "^5.3.0",
+    "jsonwebtoken": "^9.0.3",
+    "multer": "^2.5.0",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "prisma": "^5.22.0",
+    "vitest": "^5.1.0"
+  }
+}

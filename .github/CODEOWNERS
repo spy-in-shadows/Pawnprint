@@ -1,0 +1,115 @@
+# Generated from the OWN_A / OWN_B / OWN_C lists in scripts/preflight.sh. Keep both in sync.
+# A = Data and ingestion, B = Pipeline and engine (repository owner), C = Product and analytics.
+
+# Default: repository owner
+*  @spy-in-shadows
+
+# Person A
+/docker-compose.yml  @07shlokjoshi
+/.env.example  @07shlokjoshi
+/.github/workflows/  @07shlokjoshi
+/src/config/  @07shlokjoshi
+/src/utils/logger.js  @07shlokjoshi
+/prisma/  @07shlokjoshi
+/src/chess/pgnParser.js  @07shlokjoshi
+/src/ingest/  @07shlokjoshi
+/src/repositories/moveBulk.repo.js  @07shlokjoshi
+/src/services/import.service.js  @07shlokjoshi
+/scripts/benchmarkInsert.js  @07shlokjoshi
+/scripts/importPuzzles.js  @07shlokjoshi
+/scripts/README.md  @07shlokjoshi
+/docs/benchmarks/insert.md  @07shlokjoshi
+/tests/config.test.js  @07shlokjoshi
+/tests/logger.test.js  @07shlokjoshi
+/tests/schema.*  @07shlokjoshi
+/tests/seed.test.js  @07shlokjoshi
+/tests/db.test.js  @07shlokjoshi
+/tests/parser.test.js  @07shlokjoshi
+/tests/moveBulk.test.js  @07shlokjoshi
+/tests/import.service.test.js  @07shlokjoshi
+/tests/importPuzzles.test.js  @07shlokjoshi
+/tests/fixtures/  @07shlokjoshi
+
+# Person B
+/package.json  @spy-in-shadows
+/package-lock.json  @spy-in-shadows
+/vitest.config.js  @spy-in-shadows
+/.gitignore  @spy-in-shadows
+/DESIGN.md  @spy-in-shadows
+/ENGINEERING.md  @spy-in-shadows
+/docs/CONTRACTS.md  @spy-in-shadows
+/.github/pull_request_template.md  @spy-in-shadows
+/.github/CODEOWNERS  @spy-in-shadows
+/scripts/preflight.sh  @spy-in-shadows
+/src/app.js  @spy-in-shadows
+/src/server.js  @spy-in-shadows
+/src/worker.js  @spy-in-shadows
+/src/utils/errors.js  @spy-in-shadows
+/src/middleware/errorHandler.js  @spy-in-shadows
+/src/routes/v1/index.js  @spy-in-shadows
+/src/chess/evalMath.js  @spy-in-shadows
+/src/chess/phase.js  @spy-in-shadows
+/src/chess/fen.js  @spy-in-shadows
+/src/chess/stockfishClient.js  @spy-in-shadows
+/src/chess/motifs.js  @spy-in-shadows
+/src/workers/  @spy-in-shadows
+/scripts/benchmarkThroughput.js  @spy-in-shadows
+/scripts/dataQuality.js  @spy-in-shadows
+/docs/benchmarks/throughput.md  @spy-in-shadows
+/tests/app.test.js  @spy-in-shadows
+/tests/evalMath.test.js  @spy-in-shadows
+/tests/phase.test.js  @spy-in-shadows
+/tests/fen.test.js  @spy-in-shadows
+/tests/jobQueue.test.js  @spy-in-shadows
+/tests/poisonJobs.test.js  @spy-in-shadows
+/tests/claim.concurrency.test.js  @spy-in-shadows
+/tests/stockfish*.test.js  @spy-in-shadows
+/tests/gameAnalyzer.test.js  @spy-in-shadows
+/tests/jobRunner.test.js  @spy-in-shadows
+/tests/dataQuality.test.js  @spy-in-shadows
+/tests/motifs.test.js  @spy-in-shadows
+/tests/crashRecovery.test.js  @spy-in-shadows
+/tests/integration.test.js  @spy-in-shadows
+
+# Person C
+/src/routes/  @Shailja-Vatsa
+/src/controllers/  @Shailja-Vatsa
+/src/services/auth.service.js  @Shailja-Vatsa
+/src/services/analytics.service.js  @Shailja-Vatsa
+/src/services/training.service.js  @Shailja-Vatsa
+/src/services/summary.service.js  @Shailja-Vatsa
+/src/services/health.service.js  @Shailja-Vatsa
+/src/services/account.service.js  @Shailja-Vatsa
+/src/services/upload.service.js  @Shailja-Vatsa
+/src/services/games.service.js  @Shailja-Vatsa
+/src/services/drill.js  @Shailja-Vatsa
+/src/repositories/analytics.repo.js  @Shailja-Vatsa
+/src/repositories/game.repo.js  @Shailja-Vatsa
+/src/repositories/training.repo.js  @Shailja-Vatsa
+/src/repositories/user.repo.js  @Shailja-Vatsa
+/src/middleware/authenticate.js  @Shailja-Vatsa
+/src/middleware/requestLogger.js  @Shailja-Vatsa
+/src/middleware/rateLimit.js  @Shailja-Vatsa
+/client/  @Shailja-Vatsa
+/docs/explain/  @Shailja-Vatsa
+/docs/benchmarks/queries.md  @Shailja-Vatsa
+/docs/DEMO.md  @Shailja-Vatsa
+/scripts/benchmarkQueries.js  @Shailja-Vatsa
+/scripts/explainAnalytics.js  @Shailja-Vatsa
+/tests/auth.test.js  @Shailja-Vatsa
+/tests/games.test.js  @Shailja-Vatsa
+/tests/accounts.test.js  @Shailja-Vatsa
+/tests/uploads.test.js  @Shailja-Vatsa
+/tests/analytics.test.js  @Shailja-Vatsa
+/tests/summary.test.js  @Shailja-Vatsa
+/tests/training.test.js  @Shailja-Vatsa
+/tests/drill.test.js  @Shailja-Vatsa
+/tests/health.test.js  @Shailja-Vatsa
+/tests/rateLimit.test.js  @Shailja-Vatsa
+/tests/static.test.js  @Shailja-Vatsa
+
+# Shared: B owns the stub, C replaces it in C16
+/README.md  @spy-in-shadows @Shailja-Vatsa
+
+# Exception inside C's src/routes/ (last match wins)
+/src/routes/v1/index.js  @spy-in-shadows
