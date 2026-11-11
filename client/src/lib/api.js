@@ -20,8 +20,10 @@ export async function apiRequest(path, options = {}) {
   const url = path.startsWith('/api') ? path : `${API_PREFIX}${path.startsWith('/') ? path : `/${path}`}`;
   const token = getStoredToken();
 
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+
   const headers = {
-    'Content-Type': 'application/json',
+    ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
     ...(options.headers || {}),
   };
 
@@ -66,11 +68,17 @@ export async function apiRequest(path, options = {}) {
 
 export const api = {
   get: (path, options) => apiRequest(path, { ...options, method: 'GET' }),
-  post: (path, body, options) => apiRequest(path, { ...options, method: 'POST', body: JSON.stringify(body) }),
+  post: (path, body, options) => {
+    const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
+    return apiRequest(path, {
+      ...options,
+      method: 'POST',
+      body: isFormData ? body : JSON.stringify(body),
+    });
+  },
   put: (path, body, options) => apiRequest(path, { ...options, method: 'PUT', body: JSON.stringify(body) }),
   patch: (path, body, options) => apiRequest(path, { ...options, method: 'PATCH', body: JSON.stringify(body) }),
   delete: (path, options) => apiRequest(path, { ...options, method: 'DELETE' }),
 };
 
 export default api;
-
