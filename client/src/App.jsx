@@ -2,11 +2,11 @@ import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { LoginView } from './pages/LoginView';
+import { RegisterView } from './pages/RegisterView';
+import { ImportView } from './pages/ImportView';
 import {
-  LoginPage,
-  RegisterPage,
   DashboardPage,
-  ImportPage,
   GamesPage,
   GameDetailPage,
   TrainingPage,
@@ -17,8 +17,8 @@ export function App() {
     <Routes>
       <Route path="/" element={<Layout />}>
         <Route index element={<Navigate to="/dashboard" replace />} />
-        <Route path="login" element={<LoginPage />} />
-        <Route path="register" element={<RegisterPage />} />
+        <Route path="login" element={<LoginView />} />
+        <Route path="register" element={<RegisterView />} />
         <Route
           path="dashboard"
           element={
@@ -31,7 +31,7 @@ export function App() {
           path="import"
           element={
             <ProtectedRoute>
-              <ImportPage />
+              <ImportView />
             </ProtectedRoute>
           }
         />
@@ -66,4 +66,3 @@ export function App() {
 }
 
 export default App;
-
