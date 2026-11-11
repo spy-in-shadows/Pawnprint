@@ -138,7 +138,7 @@ All stored evals are **from White's perspective** in centipawns. For analysis, c
   - Mistake: $10\% \le \Delta WP < 20\%$
   - Blunder: $\Delta WP \ge 20\%$
 - **No early-ply masking:** classify **every** ply, including moves 1 to 10.
-- Phase assignment: opening = until ply 20 or material drop; endgame = total non-pawn material $\le 13$; middlegame = everything else.
+- Phase assignment (`src/chess/phase.js`), checked in order: endgame = total non-pawn, non-king material for both sides $\le 24$ (N=3, B=3, R=5, Q=9; the start position is 62); opening = ply $\le 20$ and both sides still have a queen; middlegame = everything else.
 - Time pressure: `time_pressure = clock_remaining_ms < 10% of base time`.
 
 ## 8. Analytics queries (the product value)
