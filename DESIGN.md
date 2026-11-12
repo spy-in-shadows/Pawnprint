@@ -50,7 +50,7 @@ Design rules: no JSON blobs for move data, no wide NULL-filled rows, every repea
 - `openings(id, eco, name)`: seeded from an ECO dataset
 - `games(id, player_account_id, platform_id, external_id, played_at, color, result_id, opening_id, time_control_id, player_rating, opponent_rating, total_plies, analysis_status, failure_reason, UNIQUE(platform_id, external_id))`
 - `results(id, code)`: win, loss, draw
-- `time_controls(id, base_seconds, increment_seconds, category)`: bullet, blitz, rapid, classical
+- `time_controls(id, base_seconds, increment_seconds, category)`: bullet, blitz, rapid, classical, correspondence
 
 ### Moves (one row per ply, narrow and insert-only)
 - `moves(id, game_id, ply, san, uci, fen_before, mover_color, clock_remaining_ms, time_spent_ms, phase_id, UNIQUE(game_id, ply))`
