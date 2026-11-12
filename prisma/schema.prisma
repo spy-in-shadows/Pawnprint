@@ -22,21 +22,23 @@ model User {
   passwordHash   String          @map("password_hash")
   createdAt      DateTime        @default(now()) @map("created_at")
   playerAccounts PlayerAccount[]
+  trainingPlans  TrainingPlan[]
 
   @@map("users")
 }
 
 model PlayerAccount {
-  id           Int       @id @default(autoincrement())
-  userId       Int       @map("user_id")
-  platformId   Int       @map("platform_id")
+  id           Int           @id @default(autoincrement())
+  userId       Int           @map("user_id")
+  platformId   Int           @map("platform_id")
   username     String
-  lastSyncedAt DateTime? @map("last_synced_at")
-  createdAt    DateTime  @default(now()) @map("created_at")
+  lastSyncedAt DateTime?     @map("last_synced_at")
+  createdAt    DateTime      @default(now()) @map("created_at")
 
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  platform Platform @relation(fields: [platformId], references: [id])
-  games    Game[]
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platform     Platform      @relation(fields: [platformId], references: [id])
+  games        Game[]
+  analysisJobs AnalysisJob[]
 
   @@unique([platformId, username])
   @@map("player_accounts")
@@ -93,6 +95,7 @@ model Game {
   opening       Opening?      @relation(fields: [openingId], references: [id])
   timeControl   TimeControl?  @relation(fields: [timeControlId], references: [id])
   moves         Move[]
+  analysisJobGames AnalysisJobGame[]
 
   @@unique([platformId, externalId])
   @@index([playerAccountId, playedAt])
@@ -189,9 +192,11 @@ model MoveClassification {
 }
 
 model Motif {
-  id         Int         @id @default(autoincrement())
-  name       String      @unique
-  moveMotifs MoveMotif[]
+  id                Int                @id @default(autoincrement())
+  name              String             @unique
+  moveMotifs        MoveMotif[]
+  puzzleMotifs      PuzzleMotif[]
+  trainingPlanItems TrainingPlanItem[]
 
   @@map("motifs")
 }
@@ -206,5 +211,94 @@ model MoveMotif {
 
   @@id([moveId, motifId, kind])
   @@map("move_motifs")
+}
+
+model Puzzle {
+  id                Int                @id @default(autoincrement())
+  lichessId         String             @unique @map("lichess_id")
+  fen               String
+  movesUci          String             @map("moves_uci")
+  rating            Int
+  phaseTag          String?            @map("phase_tag")
+  motifs            PuzzleMotif[]
+  trainingPlanItems TrainingPlanItem[]
+
+  @@map("puzzles")
+}
+
+model PuzzleMotif {
+  puzzleId Int    @map("puzzle_id")
+  motifId  Int    @map("motif_id")
+
+  puzzle   Puzzle @relation(fields: [puzzleId], references: [id], onDelete: Cascade)
+  motif    Motif  @relation(fields: [motifId], references: [id])
+
+  @@id([puzzleId, motifId])
+  @@map("puzzle_motifs")
+}
+
+model TrainingPlan {
+  id        Int                @id @default(autoincrement())
+  userId    Int                @map("user_id")
+  createdAt DateTime           @default(now()) @map("created_at")
+
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     TrainingPlanItem[]
+
+  @@map("training_plans")
+}
+
+model TrainingPlanItem {
+  id          Int          @id @default(autoincrement())
+  planId      Int          @map("plan_id")
+  puzzleId    Int          @map("puzzle_id")
+  motifId     Int?         @map("motif_id")
+  reasonCode  String       @map("reason_code")
+  completedAt DateTime?    @map("completed_at")
+
+  plan        TrainingPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  puzzle      Puzzle       @relation(fields: [puzzleId], references: [id])
+  motif       Motif?       @relation(fields: [motifId], references: [id])
+
+  @@map("training_plan_items")
+}
+
+// Partial unique index idx_analysis_jobs_active_unique enforces one active import job per account.
+// All raw SQL timestamp columns must use (NOW() AT TIME ZONE 'UTC').
+model AnalysisJob {
+  id              Int               @id @default(autoincrement())
+  playerAccountId Int               @map("player_account_id")
+  status          String            @default("queued")
+  attempts        Int               @default(0)
+  maxGames        Int?              @default(50) @map("max_games")
+  since           DateTime?
+  until           DateTime?
+  lockedBy        String?           @map("locked_by")
+  lockedAt        DateTime?         @map("locked_at")
+  heartbeatAt     DateTime?         @map("heartbeat_at")
+  error           String?
+  failedGames     Int?              @default(0) @map("failed_games")
+  skippedGames    Int?              @default(0) @map("skipped_games")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  finishedAt      DateTime?         @map("finished_at")
+
+  playerAccount   PlayerAccount     @relation(fields: [playerAccountId], references: [id], onDelete: Cascade)
+  jobGames        AnalysisJobGame[]
+
+  @@index([status, createdAt])
+  @@map("analysis_jobs")
+}
+
+model AnalysisJobGame {
+  jobId  Int         @map("job_id")
+  gameId Int         @map("game_id")
+  status String      @default("pending")
+  error  String?
+
+  job    AnalysisJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  game   Game        @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@id([jobId, gameId])
+  @@map("analysis_job_games")
 }
 
