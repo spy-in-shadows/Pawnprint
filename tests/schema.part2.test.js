@@ -251,16 +251,17 @@ describe('schema part 2 - moves, evals, mates, classifications and motifs', () =
       })
     ).rejects.toThrow();
 
+    const uniqueDepth = 100 + Math.floor(Math.random() * 9000);
     const differentDepth = await prisma.engineVersion.create({
       data: {
         name: 'Stockfish',
         version: '16',
-        defaultDepth: 14,
+        defaultDepth: uniqueDepth,
         threads: 1,
         hashSize: 64,
       },
     });
-    expect(differentDepth.defaultDepth).toBe(14);
+    expect(differentDepth.defaultDepth).toBe(uniqueDepth);
   });
 
   it('cascades delete from move to evals, mates, classifications, and motifs', async () => {
