@@ -241,4 +241,38 @@ describe('schema part 3 - puzzles, training plans and analysis jobs', () => {
     const motifLinks = await prisma.puzzleMotif.findMany({ where: { puzzleId: puzzle.id } });
     expect(motifLinks).toHaveLength(0);
   });
+
+  it('defaults max_games to 50, failed_games to 0, and skipped_games to 0 for a new analysis job', async () => {
+    const account = await createTestAccount('job_defaults');
+    const job = await prisma.analysisJob.create({
+      data: {
+        playerAccountId: account.id,
+        status: 'queued',
+      },
+    });
+
+    expect(job.maxGames).toBe(50);
+    expect(job.failedGames).toBe(0);
+    expect(job.skippedGames).toBe(0);
+
+    await prisma.analysisJob.delete({ where: { id: job.id } });
+  });
+
+  it('rejects setting failed_games to NULL via raw SQL', async () => {
+    const account = await createTestAccount('null_failed_games');
+    const job = await prisma.analysisJob.create({
+      data: {
+        playerAccountId: account.id,
+        status: 'queued',
+      },
+    });
+
+    await expect(
+      prisma.$executeRaw`
+        UPDATE analysis_jobs SET failed_games = NULL WHERE id = ${job.id}
+      `
+    ).rejects.toThrow();
+
+    await prisma.analysisJob.delete({ where: { id: job.id } });
+  });
 });

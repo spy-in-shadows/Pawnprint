@@ -139,8 +139,8 @@ model EngineVersion {
   name         String
   version      String
   defaultDepth Int        @map("default_depth")
-  threads      Int?       @default(1)
-  hashSize     Int?       @default(64) @map("hash_size")
+  threads      Int        @default(1)
+  hashSize     Int        @default(64) @map("hash_size")
   evals        MoveEval[]
 
   @@unique([name, version, defaultDepth, threads, hashSize])
@@ -270,15 +270,15 @@ model AnalysisJob {
   playerAccountId Int               @map("player_account_id")
   status          String            @default("queued")
   attempts        Int               @default(0)
-  maxGames        Int?              @default(50) @map("max_games")
+  maxGames        Int               @default(50) @map("max_games")
   since           DateTime?
   until           DateTime?
   lockedBy        String?           @map("locked_by")
   lockedAt        DateTime?         @map("locked_at")
   heartbeatAt     DateTime?         @map("heartbeat_at")
   error           String?
-  failedGames     Int?              @default(0) @map("failed_games")
-  skippedGames    Int?              @default(0) @map("skipped_games")
+  failedGames     Int               @default(0) @map("failed_games")
+  skippedGames    Int               @default(0) @map("skipped_games")
   createdAt       DateTime          @default(now()) @map("created_at")
   finishedAt      DateTime?         @map("finished_at")
 

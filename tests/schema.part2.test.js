@@ -319,4 +319,54 @@ describe('schema part 2 - moves, evals, mates, classifications and motifs', () =
     expect(classificationRow).toBeNull();
     expect(motifRows).toHaveLength(0);
   });
+
+  it('stores default threads=1 and hashSize=64 when created without them', async () => {
+    const timestamp = Date.now();
+    const version = await prisma.engineVersion.create({
+      data: {
+        name: `TestEngine_${timestamp}`,
+        version: '1.0',
+        defaultDepth: 12,
+      },
+    });
+    expect(version.threads).toBe(1);
+    expect(version.hashSize).toBe(64);
+
+    await prisma.engineVersion.delete({ where: { id: version.id } });
+  });
+
+  it('rejects a second engine version with the same name, version and depth created with defaults', async () => {
+    const timestamp = Date.now();
+    const name = `DuplicateEngine_${timestamp}`;
+    const version1 = await prisma.engineVersion.create({
+      data: {
+        name,
+        version: '2.0',
+        defaultDepth: 14,
+      },
+    });
+    expect(version1.id).toBeDefined();
+
+    await expect(
+      prisma.engineVersion.create({
+        data: {
+          name,
+          version: '2.0',
+          defaultDepth: 14,
+        },
+      })
+    ).rejects.toThrow();
+
+    await prisma.engineVersion.delete({ where: { id: version1.id } });
+  });
+
+  it('rejects raw INSERT into engine_versions with threads = NULL', async () => {
+    const timestamp = Date.now();
+    await expect(
+      prisma.$executeRaw`
+        INSERT INTO engine_versions (name, version, default_depth, threads, hash_size)
+        VALUES (${`NullEngine_${timestamp}`}, '1.0', 10, NULL, 64)
+      `
+    ).rejects.toThrow();
+  });
 });
