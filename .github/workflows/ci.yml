@@ -75,3 +75,8 @@ jobs:
         if: hashFiles('client/package.json') != ''
         working-directory: client
         run: npm ci && npm run build
+
+      - name: Run client tests
+        if: hashFiles('client/package.json') != ''
+        working-directory: client
+        run: npm test --if-present
