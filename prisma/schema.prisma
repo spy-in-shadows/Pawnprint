@@ -1,0 +1,100 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Platform {
+  id             Int             @id @default(autoincrement())
+  name           String          @unique
+  playerAccounts PlayerAccount[]
+  games          Game[]
+
+  @@map("platforms")
+}
+
+model User {
+  id             Int             @id @default(autoincrement())
+  email          String          @unique
+  passwordHash   String          @map("password_hash")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  playerAccounts PlayerAccount[]
+
+  @@map("users")
+}
+
+model PlayerAccount {
+  id           Int       @id @default(autoincrement())
+  userId       Int       @map("user_id")
+  platformId   Int       @map("platform_id")
+  username     String
+  lastSyncedAt DateTime? @map("last_synced_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platform Platform @relation(fields: [platformId], references: [id])
+  games    Game[]
+
+  @@unique([platformId, username])
+  @@map("player_accounts")
+}
+
+model Result {
+  id    Int    @id @default(autoincrement())
+  code  String @unique
+  games Game[]
+
+  @@map("results")
+}
+
+model TimeControl {
+  id               Int    @id @default(autoincrement())
+  baseSeconds      Int    @map("base_seconds")
+  incrementSeconds Int    @map("increment_seconds")
+  category         String
+  games            Game[]
+
+  @@unique([baseSeconds, incrementSeconds])
+  @@map("time_controls")
+}
+
+model Opening {
+  id    Int    @id @default(autoincrement())
+  eco   String
+  name  String
+  games Game[]
+
+  @@unique([eco, name])
+  @@map("openings")
+}
+
+model Game {
+  id             Int       @id @default(autoincrement())
+  playerAccountId Int      @map("player_account_id")
+  platformId     Int       @map("platform_id")
+  externalId     String    @map("external_id")
+  playedAt       DateTime  @map("played_at")
+  color          String
+  resultId       Int       @map("result_id")
+  openingId      Int?      @map("opening_id")
+  timeControlId  Int?      @map("time_control_id")
+  playerRating   Int?      @map("player_rating")
+  opponentRating Int?      @map("opponent_rating")
+  totalPlies     Int       @map("total_plies")
+  analysisStatus String    @default("pending") @map("analysis_status")
+  failureReason  String?   @map("failure_reason")
+
+  playerAccount PlayerAccount @relation(fields: [playerAccountId], references: [id], onDelete: Cascade)
+  platform      Platform      @relation(fields: [platformId], references: [id])
+  result        Result        @relation(fields: [resultId], references: [id])
+  opening       Opening?      @relation(fields: [openingId], references: [id])
+  timeControl   TimeControl?  @relation(fields: [timeControlId], references: [id])
+
+  @@unique([platformId, externalId])
+  @@index([playerAccountId, playedAt])
+  @@map("games")
+}
+
