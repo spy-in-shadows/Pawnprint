@@ -92,9 +92,119 @@ model Game {
   result        Result        @relation(fields: [resultId], references: [id])
   opening       Opening?      @relation(fields: [openingId], references: [id])
   timeControl   TimeControl?  @relation(fields: [timeControlId], references: [id])
+  moves         Move[]
 
   @@unique([platformId, externalId])
   @@index([playerAccountId, playedAt])
   @@map("games")
+}
+
+model Phase {
+  id    Int    @id @default(autoincrement())
+  name  String @unique
+  moves Move[]
+
+  @@map("phases")
+}
+
+model Move {
+  id               Int                 @id @default(autoincrement())
+  gameId           Int                 @map("game_id")
+  ply              Int
+  san              String
+  uci              String
+  fenBefore        String              @map("fen_before")
+  moverColor       String              @map("mover_color")
+  clockRemainingMs Int?                @map("clock_remaining_ms")
+  timeSpentMs      Int?                @map("time_spent_ms")
+  phaseId          Int                 @map("phase_id")
+
+  game           Game                @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  phase          Phase               @relation(fields: [phaseId], references: [id])
+  eval           MoveEval?
+  mate           MoveMate?
+  classification MoveClassification?
+  motifs         MoveMotif[]
+
+  @@unique([gameId, ply])
+  @@map("moves")
+}
+
+// Engine version rows are immutable by design
+model EngineVersion {
+  id           Int        @id @default(autoincrement())
+  name         String
+  version      String
+  defaultDepth Int        @map("default_depth")
+  threads      Int?       @default(1)
+  hashSize     Int?       @default(64) @map("hash_size")
+  evals        MoveEval[]
+
+  @@unique([name, version, defaultDepth, threads, hashSize])
+  @@map("engine_versions")
+}
+
+model MoveEval {
+  moveId          Int           @id @map("move_id")
+  evalBeforeCp    Int           @map("eval_before_cp")
+  evalAfterCp     Int           @map("eval_after_cp")
+  bestUci         String        @map("best_uci")
+  depth           Int
+  engineVersionId Int           @map("engine_version_id")
+
+  move          Move          @relation(fields: [moveId], references: [id], onDelete: Cascade)
+  engineVersion EngineVersion @relation(fields: [engineVersionId], references: [id])
+
+  @@map("move_evals")
+}
+
+// Separate table for mate evaluations so move_evals remains non-null and compact; forced mates are sparse
+model MoveMate {
+  moveId     Int   @id @map("move_id")
+  mateBefore Int?  @map("mate_before")
+  mateAfter  Int?  @map("mate_after")
+
+  move Move @relation(fields: [moveId], references: [id], onDelete: Cascade)
+
+  @@map("move_mates")
+}
+
+model Classification {
+  id                  Int                  @id @default(autoincrement())
+  name                String               @unique
+  moveClassifications MoveClassification[]
+
+  @@map("classifications")
+}
+
+model MoveClassification {
+  moveId           Int            @id @map("move_id")
+  classificationId Int            @map("classification_id")
+  cpLoss           Int            @map("cp_loss")
+
+  move           Move           @relation(fields: [moveId], references: [id], onDelete: Cascade)
+  classification Classification @relation(fields: [classificationId], references: [id])
+
+  @@map("move_classifications")
+}
+
+model Motif {
+  id         Int         @id @default(autoincrement())
+  name       String      @unique
+  moveMotifs MoveMotif[]
+
+  @@map("motifs")
+}
+
+model MoveMotif {
+  moveId  Int    @map("move_id")
+  motifId Int    @map("motif_id")
+  kind    String @default("allowed")
+
+  move  Move  @relation(fields: [moveId], references: [id], onDelete: Cascade)
+  motif Motif @relation(fields: [motifId], references: [id])
+
+  @@id([moveId, motifId, kind])
+  @@map("move_motifs")
 }
 
