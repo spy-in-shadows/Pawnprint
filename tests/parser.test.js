@@ -64,7 +64,12 @@ describe('pgnParser clock and time control helpers', () => {
     expect(parseTimeControl('-')).toEqual({
       baseSeconds: 0,
       incrementSeconds: 0,
-      category: 'classical',
+      category: 'correspondence',
+    });
+    expect(parseTimeControl('1/86400')).toEqual({
+      baseSeconds: 86400,
+      incrementSeconds: 0,
+      category: 'correspondence',
     });
     expect(parseTimeControl('')).toEqual({
       baseSeconds: 0,
@@ -289,5 +294,21 @@ describe('pgnParser PGN parsing', () => {
     expect(game.moves).toHaveLength(4);
     expect(game.totalPlies).toBe(4);
     expect(game.parseError).toBe('Illegal move at ply 5: Ke8');
+  });
+
+  it('sets parseError and returns zero moves for invalid start FEN under SetUp 1', async () => {
+    const pgn = `[Event "Bad FEN"]
+[Site "https://lichess.org/badFen123"]
+[SetUp "1"]
+[FEN "invalid/fen/string w - - 0 1"]
+[Result "*"]
+
+1. e4 e5 *`;
+
+    const games = await parsePgnString(pgn);
+    expect(games).toHaveLength(1);
+    expect(games[0].parseError).toBe('Invalid start FEN: invalid/fen/string w - - 0 1');
+    expect(games[0].moves).toEqual([]);
+    expect(games[0].totalPlies).toBe(0);
   });
 });

@@ -1,9 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { prisma, pgPool } from '../src/config/db.js';
+import { seed } from '../prisma/seed/index.js';
 import {
   insertGameWithMoves,
   saveGameAnalysis,
   markGameFailed,
+  _resetLookupCache,
 } from '../src/repositories/moveBulk.repo.js';
 
 describe('moveBulk repository (transactional bulk ingestion and analysis storage)', () => {
@@ -13,6 +15,9 @@ describe('moveBulk repository (transactional bulk ingestion and analysis storage
   let engineVersion;
 
   beforeAll(async () => {
+    // Seed lookup tables before anything else
+    await seed(prisma);
+
     platform = await prisma.platform.upsert({
       where: { name: 'lichess' },
       update: {},
@@ -238,6 +243,82 @@ describe('moveBulk repository (transactional bulk ingestion and analysis storage
     }
   });
 
+  it('missing phase lookup gives a clear error and leaves no rows', async () => {
+    const externalId = `missing_phase_${Date.now()}`;
+    const parsedGame = {
+      externalId,
+      white: testAccount.username,
+      black: 'Opponent',
+      resultRaw: '1-0',
+      timeControl: { baseSeconds: 180, incrementSeconds: 0, category: 'blitz' },
+      playedAt: new Date(),
+      totalPlies: 1,
+      parseError: null,
+      moves: [
+        {
+          ply: 1,
+          san: 'e4',
+          uci: 'e2e4',
+          fenBefore: 'start',
+          moverColor: 'white',
+          phase: 'unknown_phase',
+          clockRemainingMs: null,
+          timeSpentMs: null,
+        },
+      ],
+    };
+
+    await expect(insertGameWithMoves(testAccount.id, parsedGame)).rejects.toThrow(
+      "phases lookup missing 'unknown_phase'; run npm run seed"
+    );
+
+    const game = await prisma.game.findFirst({ where: { platformId: platform.id, externalId } });
+    expect(game).toBeNull();
+  });
+
+  it('getLookups throws without caching if lookup tables are incomplete', async () => {
+    _resetLookupCache();
+    const origConnect = pgPool.connect.bind(pgPool);
+    const patchedClients = [];
+    const spy = vi.spyOn(pgPool, 'connect').mockImplementation(async () => {
+      const client = await origConnect();
+      const origQuery = client.query;
+      patchedClients.push({ client, origQuery });
+      client.query = async (...args) => {
+        const sql = args[0];
+        if (typeof sql === 'string' && sql.includes('FROM phases')) {
+          return { rows: [{ id: 1, name: 'opening' }] }; // missing middlegame, endgame
+        }
+        return origQuery.apply(client, args);
+      };
+      return client;
+    });
+
+    try {
+      const parsedGame = {
+        externalId: `fail_lookups_${Date.now()}`,
+        white: testAccount.username,
+        black: 'Opponent',
+        resultRaw: '1-0',
+        timeControl: { baseSeconds: 180, incrementSeconds: 0, category: 'blitz' },
+        playedAt: new Date(),
+        totalPlies: 0,
+        parseError: null,
+        moves: [],
+      };
+
+      await expect(insertGameWithMoves(testAccount.id, parsedGame)).rejects.toThrow(
+        "phases lookup missing 'middlegame'; run npm run seed"
+      );
+    } finally {
+      for (const { client, origQuery } of patchedClients) {
+        client.query = origQuery;
+      }
+      spy.mockRestore();
+      _resetLookupCache();
+    }
+  });
+
   it('saveGameAnalysis twice creates no duplicates and sets the status', async () => {
     const externalId = `analysis_game_${Date.now()}`;
     const parsedGame = {
@@ -313,6 +394,102 @@ describe('moveBulk repository (transactional bulk ingestion and analysis storage
     });
     expect(evalsCount2).toBe(evalsCount1);
     expect(classCount2).toBe(classCount1);
+  });
+
+  it('unknown ply, classification or motif in saveGameAnalysis throws and leaves no evals', async () => {
+    const externalId = `unknown_analysis_${Date.now()}`;
+    const parsedGame = {
+      externalId,
+      white: testAccount.username,
+      black: 'Opponent',
+      resultRaw: '1-0',
+      timeControl: { baseSeconds: 300, incrementSeconds: 0, category: 'blitz' },
+      playedAt: new Date(),
+      totalPlies: 2,
+      parseError: null,
+      moves: [
+        { ply: 1, san: 'e4', uci: 'e2e4', fenBefore: 'fen1', moverColor: 'white', phase: 'opening', clockRemainingMs: null, timeSpentMs: null },
+        { ply: 2, san: 'e5', uci: 'e7e5', fenBefore: 'fen2', moverColor: 'black', phase: 'opening', clockRemainingMs: null, timeSpentMs: null },
+      ],
+    };
+
+    const { gameId } = await insertGameWithMoves(testAccount.id, parsedGame);
+
+    // 1. Unknown ply
+    await expect(
+      saveGameAnalysis({
+        gameId,
+        engineVersionId: engineVersion.id,
+        moves: [
+          {
+            ply: 99,
+            evalBeforeCp: 0,
+            evalAfterCp: 0,
+            bestUci: 'e2e4',
+            depth: 12,
+            mateBefore: null,
+            mateAfter: null,
+            cpLoss: 0,
+            classification: 'best',
+          },
+        ],
+      })
+    ).rejects.toThrow(`No matching move row found for ply 99 in game ${gameId}`);
+
+    let evalsCount = await prisma.moveEval.count({ where: { move: { gameId } } });
+    expect(evalsCount).toBe(0);
+
+    // 2. Unknown classification
+    await expect(
+      saveGameAnalysis({
+        gameId,
+        engineVersionId: engineVersion.id,
+        moves: [
+          {
+            ply: 1,
+            evalBeforeCp: 0,
+            evalAfterCp: 0,
+            bestUci: 'e2e4',
+            depth: 12,
+            mateBefore: null,
+            mateAfter: null,
+            cpLoss: 0,
+            classification: 'non_existent_class',
+          },
+        ],
+      })
+    ).rejects.toThrow("Unknown classification 'non_existent_class' at ply 1");
+
+    evalsCount = await prisma.moveEval.count({ where: { move: { gameId } } });
+    expect(evalsCount).toBe(0);
+
+    // 3. Unknown motif
+    await expect(
+      saveGameAnalysis({
+        gameId,
+        engineVersionId: engineVersion.id,
+        moves: [
+          {
+            ply: 1,
+            evalBeforeCp: 0,
+            evalAfterCp: 0,
+            bestUci: 'e2e4',
+            depth: 12,
+            mateBefore: null,
+            mateAfter: null,
+            cpLoss: 0,
+            classification: 'best',
+            motifs: [{ name: 'super_fork', kind: 'allowed' }],
+          },
+        ],
+      })
+    ).rejects.toThrow("Unknown motif 'super_fork' at ply 1");
+
+    evalsCount = await prisma.moveEval.count({ where: { move: { gameId } } });
+    expect(evalsCount).toBe(0);
+
+    const game = await prisma.game.findUnique({ where: { id: gameId } });
+    expect(game.analysisStatus).toBe('pending');
   });
 
   it('mate rows only where mates exist', async () => {
@@ -441,7 +618,7 @@ describe('moveBulk repository (transactional bulk ingestion and analysis storage
       externalId,
       white: testAccount.username,
       black: 'Rival',
-      resultRaw: '*',
+      resultRaw: '1-0',
       timeControl: { baseSeconds: 180, incrementSeconds: 0, category: 'blitz' },
       playedAt: new Date(),
       totalPlies: 0,
@@ -454,6 +631,36 @@ describe('moveBulk repository (transactional bulk ingestion and analysis storage
 
     expect(game.analysisStatus).toBe('failed');
     expect(game.failureReason).toBe('Corrupted PGN syntax before move 1');
+  });
+
+  it('a * result throws UNFINISHED_GAME and inserts nothing', async () => {
+    const externalId = `unfinished_star_${Date.now()}`;
+    const parsedGame = {
+      externalId,
+      white: testAccount.username,
+      black: 'Opponent',
+      resultRaw: '*',
+      timeControl: { baseSeconds: 180, incrementSeconds: 0, category: 'blitz' },
+      playedAt: new Date(),
+      totalPlies: 2,
+      parseError: null,
+      moves: [
+        { ply: 1, san: 'e4', uci: 'e2e4', fenBefore: 'fen1', moverColor: 'white', phase: 'opening', clockRemainingMs: null, timeSpentMs: null },
+      ],
+    };
+
+    let caughtError = null;
+    try {
+      await insertGameWithMoves(testAccount.id, parsedGame);
+    } catch (err) {
+      caughtError = err;
+    }
+
+    expect(caughtError).not.toBeNull();
+    expect(caughtError.code).toBe('UNFINISHED_GAME');
+
+    const game = await prisma.game.findFirst({ where: { platformId: platform.id, externalId } });
+    expect(game).toBeNull();
   });
 
   it('markGameFailed updates analysis_status and failure_reason', async () => {
