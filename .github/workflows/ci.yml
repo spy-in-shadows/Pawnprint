@@ -1,0 +1,77 @@
+# Schema migrations, seed data, and client build steps are guarded with hashFiles checks
+# so that CI passes during early project phases before prisma/schema.prisma and client/package.json exist.
+
+name: CI
+
+'on':
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: chess
+          POSTGRES_PASSWORD: chess
+          POSTGRES_DB: chess
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Stockfish
+        run: sudo apt-get update && sudo apt-get install -y stockfish
+
+      - name: Deploy database migrations
+        if: hashFiles('prisma/schema.prisma') != ''
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://chess:chess@localhost:5432/chess
+
+      - name: Seed database
+        if: hashFiles('prisma/schema.prisma') != ''
+        run: npm run seed
+        env:
+          DATABASE_URL: postgresql://chess:chess@localhost:5432/chess
+
+      - name: Run test suite
+        run: npm test
+        env:
+          DATABASE_URL: postgresql://chess:chess@localhost:5432/chess
+          JWT_SECRET: ci-secret
+          STOCKFISH_PATH: /usr/games/stockfish
+
+  client:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        if: hashFiles('client/package.json') != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build client
+        if: hashFiles('client/package.json') != ''
+        working-directory: client
+        run: npm ci && npm run build
