@@ -3,6 +3,7 @@ import { Readable } from 'stream';
 import crypto from 'crypto';
 import { Chess } from 'chess.js';
 import { classifyPhase } from './phase.js';
+import { validateFen } from './fen.js';
 
 export function parseClockToMs(clockStr) {
   if (!clockStr || typeof clockStr !== 'string') return null;
@@ -36,8 +37,17 @@ export function parseTimeControl(tcStr) {
     return { baseSeconds: 0, incrementSeconds: 0, category: 'classical' };
   }
   const trimmed = tcStr.trim();
-  if (!trimmed || trimmed === '-' || trimmed === '?') {
+  if (trimmed === '-') {
+    return { baseSeconds: 0, incrementSeconds: 0, category: 'correspondence' };
+  }
+  if (!trimmed || trimmed === '?') {
     return { baseSeconds: 0, incrementSeconds: 0, category: 'classical' };
+  }
+
+  const dailyMatch = trimmed.match(/^\d+\/(\d+)$/);
+  if (dailyMatch) {
+    const seconds = parseInt(dailyMatch[1], 10);
+    return { baseSeconds: seconds, incrementSeconds: 0, category: 'correspondence' };
   }
 
   const [basePart, incPart] = trimmed.split('+');
@@ -172,11 +182,33 @@ export function tokenizeMoveText(moveText) {
 
 function processMoves(tokens, headers, timeControl) {
   let chess;
-  try {
-    chess = (headers.SetUp === '1' && headers.FEN)
-      ? new Chess(headers.FEN)
-      : new Chess();
-  } catch {
+  if (headers.SetUp === '1') {
+    const fen = headers.FEN;
+    if (!fen) {
+      return {
+        moves: [],
+        parseError: `Invalid start FEN: ${fen}`,
+        resultRawFromMoves: null,
+      };
+    }
+    const fenCheck = validateFen(fen);
+    if (!fenCheck.ok) {
+      return {
+        moves: [],
+        parseError: `Invalid start FEN: ${fen}`,
+        resultRawFromMoves: null,
+      };
+    }
+    try {
+      chess = new Chess(fen);
+    } catch {
+      return {
+        moves: [],
+        parseError: `Invalid start FEN: ${fen}`,
+        resultRawFromMoves: null,
+      };
+    }
+  } else {
     chess = new Chess();
   }
 
