@@ -9,20 +9,8 @@ export function PlaceholderPage({ title }) {
   );
 }
 
-export function LoginPage() {
-  return <PlaceholderPage title="Login" />;
-}
-
-export function RegisterPage() {
-  return <PlaceholderPage title="Register" />;
-}
-
 export function DashboardPage() {
   return <PlaceholderPage title="Dashboard" />;
-}
-
-export function ImportPage() {
-  return <PlaceholderPage title="Import" />;
 }
 
 export function GamesPage() {

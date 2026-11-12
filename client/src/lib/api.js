@@ -11,6 +11,7 @@ export function getStoredToken() {
 export function clearStoredToken() {
   try {
     localStorage.removeItem('token');
+    localStorage.removeItem('user');
   } catch {
     // Ignore storage errors
   }
