@@ -1,8 +1,26 @@
 import * as gameRepo from '../repositories/game.repo.js';
 import { ValidationError, NotFoundError } from '../utils/errors.js';
 
+const ECO_REGEX = /^[A-E]\d\d$/;
+const MAX_INT32 = 2147483647;
+
 export async function listGames(userId, query = {}) {
   const { accountId, from, to, opening, page, pageSize } = query;
+
+  let validatedAccountId;
+  if (accountId !== undefined && accountId !== null && accountId !== '') {
+    const num = Number(accountId);
+    if (!Number.isInteger(num) || num <= 0 || num > MAX_INT32) {
+      throw new ValidationError('accountId must be a positive integer');
+    }
+    validatedAccountId = num;
+  }
+
+  if (opening !== undefined && opening !== null && opening !== '') {
+    if (typeof opening !== 'string' || !ECO_REGEX.test(opening)) {
+      throw new ValidationError('opening must be a valid 3-character ECO code (e.g. B00)');
+    }
+  }
 
   if (from && to) {
     const fromDate = new Date(from);
@@ -25,10 +43,10 @@ export async function listGames(userId, query = {}) {
 
   return gameRepo.list({
     userId,
-    accountId,
+    accountId: validatedAccountId,
     from,
     to,
-    opening,
+    opening: opening || undefined,
     page,
     pageSize,
   });

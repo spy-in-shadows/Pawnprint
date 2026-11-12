@@ -11,8 +11,7 @@ export async function list(req, res, next) {
 
 export async function getDetail(req, res, next) {
   try {
-    const gameId = Number(req.params.id);
-    const game = await gamesService.getGameDetail(req.user.id, gameId);
+    const game = await gamesService.getGameDetail(req.user.id, req.params.id);
     res.status(200).json(game);
   } catch (err) {
     next(err);

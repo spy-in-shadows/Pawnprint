@@ -481,4 +481,40 @@ describe('Games endpoints and ownership', () => {
     expect(bodyOther.error.code).toBe('NOT_FOUND');
     expect(bodyOther.error.message).toBe('Game not found');
   });
+
+  it('non-numeric or out-of-range game id returns 404 with standard message', async () => {
+    const resStringId = await fetch(`${baseUrl}/api/v1/games/abc`, {
+      headers: { Authorization: `Bearer ${tokenA}` },
+    });
+    expect(resStringId.status).toBe(404);
+    const bodyString = await resStringId.json();
+    expect(bodyString.error.code).toBe('NOT_FOUND');
+    expect(bodyString.error.message).toBe('Game not found');
+
+    const resHugeId = await fetch(`${baseUrl}/api/v1/games/99999999999`, {
+      headers: { Authorization: `Bearer ${tokenA}` },
+    });
+    expect(resHugeId.status).toBe(404);
+    const bodyHuge = await resHugeId.json();
+    expect(bodyHuge.error.code).toBe('NOT_FOUND');
+    expect(bodyHuge.error.message).toBe('Game not found');
+  });
+
+  it('invalid accountId query param returns 400 validation error', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/games?accountId=abc`, {
+      headers: { Authorization: `Bearer ${tokenA}` },
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('invalid opening ECO format returns 400 validation error', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/games?opening=invalid-eco`, {
+      headers: { Authorization: `Bearer ${tokenA}` },
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error.code).toBe('VALIDATION_ERROR');
+  });
 });

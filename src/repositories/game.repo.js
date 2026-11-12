@@ -1,5 +1,7 @@
 import { prisma } from '../config/db.js';
 
+const MAX_INT32 = 2147483647;
+
 export async function list({
   userId,
   accountId,
@@ -16,7 +18,7 @@ export async function list({
   const where = {
     playerAccount: {
       userId,
-      ...(accountId ? { id: Number(accountId) } : {}),
+      ...(accountId ? { id: accountId } : {}),
     },
     ...(from || to
       ? {
@@ -124,9 +126,14 @@ export async function list({
 }
 
 export async function getDetail({ userId, gameId }) {
+  const numericId = Number(gameId);
+  if (!Number.isInteger(numericId) || numericId <= 0 || numericId > MAX_INT32) {
+    return null;
+  }
+
   const game = await prisma.game.findFirst({
     where: {
-      id: Number(gameId),
+      id: numericId,
       playerAccount: {
         userId,
       },
