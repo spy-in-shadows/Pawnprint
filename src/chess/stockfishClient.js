@@ -4,6 +4,7 @@ import config from '../config/env.js';
 import { mateToCp } from './evalMath.js';
 import { validateFen } from './fen.js';
 import { DataError, EngineError } from '../utils/errors.js';
+import { logger } from '../utils/logger.js';
 
 const QUIT_GRACE_MS = 500;
 
@@ -43,13 +44,19 @@ export class StockfishClient {
     depth = config.engineDepth,
     threads = config.engineThreads,
     hashSize = config.engineHashMb,
+    positionTimeoutMs = 10000,
+    maxCrashes = 3,
     spawnFn = spawn,
   } = {}) {
     this.binaryPath = binaryPath;
     this.depth = depth;
     this.threads = threads;
     this.hashSize = hashSize;
+    this.positionTimeoutMs = positionTimeoutMs;
+    this.maxCrashes = maxCrashes;
     this.spawnFn = spawnFn;
+    this.crashCount = 0;
+    this.quitting = false;
     this.engineName = null;
     this.engineVersion = null;
     this.process = null;
@@ -57,9 +64,15 @@ export class StockfishClient {
     this._initPromise = null;
     this._waiter = null;
     this._queue = Promise.resolve();
+    this._epoch = 0;
+  }
+
+  get hasCrashedTooManyTimes() {
+    return this.crashCount >= this.maxCrashes;
   }
 
   init() {
+    this.quitting = false;
     if (this.isReady && this.process) return Promise.resolve();
     if (!this._initPromise) {
       const pending = this._handshake().finally(() => {
@@ -85,9 +98,12 @@ export class StockfishClient {
   }
 
   async quit() {
+    this.quitting = true;
+    this._epoch += 1;
     const child = this.process;
     this.process = null;
     this.isReady = false;
+    this._initPromise = null;
     this._rejectWaiter(new EngineError('Stockfish client is shutting down'));
     if (!child || !isAlive(child)) return;
 
@@ -189,9 +205,22 @@ export class StockfishClient {
   }
 
   _onClose(child, code, signal) {
-    if (this.process !== child) return;
+    this._handleFailure(child, new EngineError(`Stockfish exited unexpectedly (code ${code}, signal ${signal})`));
+  }
+
+  // Shared by crashes and timeouts. Events from a process we already replaced or shut down are stale.
+  _handleFailure(child, error) {
+    if (this.quitting || this.process !== child) return;
+    const wasReady = this.isReady;
+    this.crashCount += 1;
+    this._epoch += 1;
     this._discard(child);
-    this._rejectWaiter(new EngineError(`Stockfish exited unexpectedly (code ${code}, signal ${signal})`), child);
+    this._rejectWaiter(error, child);
+    logger.warn('Stockfish engine failed', { err: error, crashCount: this.crashCount });
+    // A failure during the handshake already rejects init(); respawning from there would loop on a broken binary.
+    if (wasReady && !this.hasCrashedTooManyTimes) {
+      this.init().catch((err) => logger.error('Stockfish respawn failed', { err }));
+    }
   }
 
   _onLine(child, line) {
@@ -204,9 +233,20 @@ export class StockfishClient {
     }
   }
 
+  // The timeout covers the handshake as well as searches, so a hung engine can never stall a caller.
   _request(child, command, isDone, onLine) {
     return new Promise((resolve, reject) => {
-      this._waiter = { child, isDone, onLine, resolve, reject };
+      const timer = setTimeout(() => {
+        this._handleFailure(
+          child,
+          new EngineError(`Stockfish timed out after ${this.positionTimeoutMs} ms waiting for a reply to '${command}'`),
+        );
+      }, this.positionTimeoutMs);
+      const settle = (fn) => (value) => {
+        clearTimeout(timer);
+        fn(value);
+      };
+      this._waiter = { child, isDone, onLine, resolve: settle(resolve), reject: settle(reject) };
       this._write(child, command);
     });
   }
@@ -236,8 +276,13 @@ export class StockfishClient {
   }
 
   // One engine process can run only one search at a time, so every engine call goes through this queue.
+  // A request queued before a crash or quit is rejected rather than run on whatever process replaced it.
   _enqueue(task) {
-    const run = this._queue.then(task);
+    const epoch = this._epoch;
+    const run = this._queue.then(() => {
+      if (epoch !== this._epoch) throw new EngineError('Stockfish failed or shut down before this request ran');
+      return task();
+    });
     this._queue = run.catch(() => {});
     return run;
   }
