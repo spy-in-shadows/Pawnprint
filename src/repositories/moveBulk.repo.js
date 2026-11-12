@@ -7,6 +7,10 @@ import { pgPool, withTransaction } from '../config/db.js';
 
 let lookupCache = null;
 
+export function _resetLookupCache() {
+  lookupCache = null;
+}
+
 async function getLookups(client) {
   if (lookupCache) return lookupCache;
 
@@ -19,6 +23,28 @@ async function getLookups(client) {
   const classifications = new Map(classesRes.rows.map((r) => [r.name, r.id]));
   const motifs = new Map(motifsRes.rows.map((r) => [r.name, r.id]));
   const results = new Map(resultsRes.rows.map((r) => [r.code, r.id]));
+
+  const requiredResults = ['win', 'loss', 'draw'];
+  for (const code of requiredResults) {
+    if (!results.has(code)) {
+      throw new Error(`results lookup missing '${code}'; run npm run seed`);
+    }
+  }
+
+  const requiredPhases = ['opening', 'middlegame', 'endgame'];
+  for (const name of requiredPhases) {
+    if (!phases.has(name)) {
+      throw new Error(`phases lookup missing '${name}'; run npm run seed`);
+    }
+  }
+
+  if (classifications.size === 0) {
+    throw new Error('classifications lookup is empty; run npm run seed');
+  }
+
+  if (motifs.size === 0) {
+    throw new Error('motifs lookup is empty; run npm run seed');
+  }
 
   lookupCache = { phases, classifications, motifs, results };
   return lookupCache;
@@ -39,6 +65,12 @@ function deriveResultCode(resultRaw, color) {
  * Idempotent: returns { gameId, isNew: false } if the game has already been ingested.
  */
 export async function insertGameWithMoves(accountId, parsedGame) {
+  if (parsedGame.resultRaw === '*') {
+    const err = new Error('Cannot insert unfinished game with result *');
+    err.code = 'UNFINISHED_GAME';
+    throw err;
+  }
+
   return withTransaction(async (client) => {
     const lookups = await getLookups(client);
 
@@ -66,7 +98,10 @@ export async function insertGameWithMoves(accountId, parsedGame) {
 
     // 3. Derive result relative to player's color
     const resultCode = deriveResultCode(parsedGame.resultRaw, color);
-    const resultId = lookups.results.get(resultCode) || 3;
+    const resultId = lookups.results.get(resultCode);
+    if (!resultId) {
+      throw new Error(`results lookup missing '${resultCode}'; run npm run seed`);
+    }
 
     // 4. Upsert time control if provided
     let timeControlId = null;
@@ -183,7 +218,10 @@ export async function insertGameWithMoves(accountId, parsedGame) {
       moverColors.push(m.moverColor);
       clocks.push(m.clockRemainingMs ?? null);
       timesSpent.push(m.timeSpentMs ?? null);
-      const phaseId = lookups.phases.get(m.phase) || (m.phase === 'opening' ? 1 : m.phase === 'middlegame' ? 2 : 3);
+      const phaseId = lookups.phases.get(m.phase);
+      if (!phaseId) {
+        throw new Error(`phases lookup missing '${m.phase}'; run npm run seed`);
+      }
       phaseIds.push(phaseId);
     }
 
@@ -278,7 +316,9 @@ export async function saveGameAnalysis({ gameId, engineVersionId, moves }) {
 
     for (const m of moves) {
       const moveId = plyToMoveId.get(m.ply);
-      if (!moveId) continue;
+      if (!moveId) {
+        throw new Error(`No matching move row found for ply ${m.ply} in game ${gameId}`);
+      }
 
       evalMoveIds.push(moveId);
       evalsBefore.push(m.evalBeforeCp);
@@ -298,21 +338,23 @@ export async function saveGameAnalysis({ gameId, engineVersionId, moves }) {
 
       if (m.classification) {
         const classId = lookups.classifications.get(m.classification);
-        if (classId) {
-          classMoveIds.push(moveId);
-          classIds.push(classId);
-          cpLosses.push(m.cpLoss ?? 0);
+        if (!classId) {
+          throw new Error(`Unknown classification '${m.classification}' at ply ${m.ply}`);
         }
+        classMoveIds.push(moveId);
+        classIds.push(classId);
+        cpLosses.push(m.cpLoss ?? 0);
       }
 
       if (m.motifs && m.motifs.length > 0) {
         for (const item of m.motifs) {
           const motifId = lookups.motifs.get(item.name);
-          if (motifId) {
-            motifMoveIds.push(moveId);
-            motifIds.push(motifId);
-            motifKinds.push(item.kind || 'allowed');
+          if (!motifId) {
+            throw new Error(`Unknown motif '${item.name}' at ply ${m.ply}`);
           }
+          motifMoveIds.push(moveId);
+          motifIds.push(motifId);
+          motifKinds.push(item.kind || 'allowed');
         }
       }
     }
@@ -403,6 +445,7 @@ export const moveBulkRepository = {
   insertGameWithMoves,
   saveGameAnalysis,
   markGameFailed,
+  _resetLookupCache,
 };
 
 export default moveBulkRepository;
