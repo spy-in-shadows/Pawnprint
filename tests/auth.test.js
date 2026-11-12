@@ -74,6 +74,27 @@ describe('Authentication endpoints and middleware', () => {
     expect(body.error.code).toBe('CONFLICT');
   });
 
+  it('concurrent registrations for the same email return 409 rather than 500', async () => {
+    const payload = {
+      email: 'concurrent@example.com',
+      password: 'password123',
+    };
+
+    const requests = Array.from({ length: 3 }, () =>
+      fetch(`${baseUrl}/api/v1/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+    );
+
+    const responses = await Promise.all(requests);
+    const statuses = responses.map((r) => r.status).sort();
+
+    // Exactly one should succeed with 201, and the others must return 409 Conflict (never 500)
+    expect(statuses).toEqual([201, 409, 409]);
+  });
+
   it('short password returns 400', async () => {
     const res = await fetch(`${baseUrl}/api/v1/auth/register`, {
       method: 'POST',

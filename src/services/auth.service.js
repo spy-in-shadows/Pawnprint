@@ -46,7 +46,17 @@ export async function register(rawEmail, password) {
   }
 
   const passwordHash = await bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
-  const created = await userRepo.create({ email, passwordHash });
+
+  let created;
+  try {
+    created = await userRepo.create({ email, passwordHash });
+  } catch (err) {
+    // Handle concurrent registration hitting unique constraint
+    if (err.code === 'P2002') {
+      throw new ConflictError('Email already registered');
+    }
+    throw err;
+  }
 
   const user = { id: created.id, email: created.email };
   const token = generateToken(user);
@@ -79,10 +89,11 @@ export async function login(rawEmail, password) {
 }
 
 export const authService = {
+  normalizeEmail,
+  generateToken,
+  verifyToken,
   register,
   login,
-  verifyToken,
-  generateToken,
 };
 
 export default authService;
