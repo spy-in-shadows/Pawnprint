@@ -2,8 +2,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Between tests: reset the module registry so env.js is re-executed with the
 // current process.env rather than returning the cached module from the first load.
+// Mock dotenv/config so it does not read the .env file on disk — we control
+// process.env entirely via overrides.
 async function loadConfig(overrides) {
   vi.resetModules();
+  vi.doMock('dotenv/config', () => ({}));
   const saved = { ...process.env };
   // Clear all non-essential vars so previous test values do not leak through.
   for (const key of Object.keys(process.env)) {
