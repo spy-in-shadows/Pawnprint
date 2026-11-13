@@ -88,6 +88,71 @@ describe('detectMotifs: missed', () => {
   });
 });
 
+describe('detectMotifs: pins and skewers', () => {
+  it('tags an absolute pin of a knight to the king created by the reply', () => {
+    // Bb4 lines up b4-c3-d2-e1: the c3 knight is pinned to the e1 king.
+    const tags = detect({ fen: '4kb2/8/8/8/8/2N5/7P/4K3 w - - 0 1', move: 'h2h3', best: 'e1d1', reply: 'f8b4' });
+    expect(tags).toEqual([{ name: 'pin', kind: 'allowed' }]);
+  });
+
+  it('tags a relative pin of a knight to the queen', () => {
+    // Rd8 lines up d8-d4-d1: the defended d4 knight now shields the d1 queen.
+    const tags = detect({ fen: 'r5k1/8/8/8/3N4/8/7P/3Q3K w - - 0 1', move: 'h2h3', best: 'h1g1', reply: 'a8d8' });
+    expect(tags).toEqual([{ name: 'pin', kind: 'allowed' }]);
+  });
+
+  it('tags a skewer through the king', () => {
+    // Bb2+ runs b2-c3-d4-e5-f6-g7: the king on d4 must step off the diagonal and drop the g7 rook.
+    const tags = detect({ fen: 'k7/6R1/8/8/3K4/b7/7P/8 w - - 0 1', move: 'h2h3', best: 'g7g1', reply: 'a3b2' });
+    expect(tags).toEqual([{ name: 'skewer', kind: 'allowed' }]);
+  });
+
+  it('tags a skewer through the queen', () => {
+    // Ba2 runs a2-b3-c4-d5-e6: the queen on c4 has the e6 rook behind it.
+    const tags = detect({ fen: '7k/8/4R3/8/2Q5/8/7P/1b2K3 w - - 0 1', move: 'h2h3', best: 'e1d2', reply: 'b1a2' });
+    expect(tags).toEqual([{ name: 'skewer', kind: 'allowed' }]);
+  });
+
+  it('does not tag a pin that already existed and that the reply leaves alone', () => {
+    // The b4 bishop pins the c3 knight to the e1 king before White moves; the move and the
+    // reply are both elsewhere on the board.
+    const fen = '4k3/8/8/3p4/1b6/2N5/7P/4K3 w - - 0 1';
+    expect(detect({ fen, move: 'h2h3', best: 'e1d1', reply: 'e8d7' })).toEqual([]);
+    // Same position, but ...d4 attacks the pinned knight, so the pin is exploited.
+    expect(detect({ fen, move: 'h2h3', best: 'e1d1', reply: 'd5d4' })).toEqual([{ name: 'pin', kind: 'allowed' }]);
+  });
+
+  it("tags a pin the player's own move walks into only when the reply exploits it", () => {
+    // Kf1-e1 puts the king behind the e3 knight on the e-file the e8 rook controls.
+    const fen = '4r2k/8/8/3p4/8/4N3/5P2/5K2 w - - 0 1';
+    expect(detect({ fen, move: 'f1e1', best: 'f1g1', reply: 'd5d4' })).toEqual([{ name: 'pin', kind: 'allowed' }]);
+    expect(detect({ fen, move: 'f1e1', best: 'f1g1', reply: 'h8g8' })).toEqual([]);
+  });
+
+  it("does not tag 'allowed' for a pin the player's move inflicts on the opponent", () => {
+    // Bb5 pins the c6 knight to the e8 king; that pin helps White, so it is not an error tag.
+    const tags = detect({ fen: '4k3/p7/2n5/8/8/8/8/4KB2 w - - 0 1', move: 'f1b5', best: 'e1e2', reply: 'a7a6' });
+    expect(tags).toEqual([]);
+  });
+
+  it("tags a pin the engine's best move had with kind 'missed'", () => {
+    // Bb5 would pin the c6 knight to the e8 king along b5-c6-d7-e8; White pushed a pawn instead.
+    const tags = detect({ fen: '4k3/p7/2n5/8/8/8/7P/4KB2 w - - 0 1', move: 'h2h3', best: 'f1b5', reply: 'a7a6' });
+    expect(tags).toEqual([{ name: 'pin', kind: 'missed' }]);
+  });
+
+  it("tags a skewer the engine's best move had with kind 'missed'", () => {
+    // Re1+ would run e1-e5-e8: the king on e5 has to leave the file and drop the e8 queen.
+    const tags = detect({ fen: '4q3/8/8/4k3/8/8/6P1/R6K w - - 0 1', move: 'g2g3', best: 'a1e1', reply: 'e5d4' });
+    expect(tags).toEqual([{ name: 'skewer', kind: 'missed' }]);
+  });
+
+  it('adds no pin or skewer tags in a quiet position', () => {
+    const fen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+    expect(detect({ fen, move: 'a2a3', best: 'e2e4', reply: 'e7e5', classification: 'mistake' })).toEqual([]);
+  });
+});
+
 describe('detectMotifs: gate', () => {
   it.each(['best', 'good', 'inaccuracy', null])('returns [] for classification %s', (classification) => {
     expect(detect({ ...KNIGHT_FORK, classification })).toEqual([]);
