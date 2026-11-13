@@ -16,6 +16,24 @@ function toEpochMs(val) {
 }
 
 /**
+ * Extracts year and month from an archive URL (.../games/YYYY/MM) and returns
+ * the month's UTC start and end timestamps in milliseconds.
+ */
+function getArchiveMonthRange(archiveUrl) {
+  if (typeof archiveUrl !== 'string') return null;
+  const match = archiveUrl.match(/\/(\d{4})\/(\d{1,2})(?:\/pgn)?\/?$/);
+  if (!match) return null;
+  const year = parseInt(match[1], 10);
+  const month = parseInt(match[2], 10);
+  if (Number.isNaN(year) || Number.isNaN(month) || month < 1 || month > 12) {
+    return null;
+  }
+  const startMs = Date.UTC(year, month - 1, 1, 0, 0, 0, 0);
+  const endMs = Date.UTC(year, month, 1, 0, 0, 0, 0) - 1;
+  return { startMs, endMs };
+}
+
+/**
  * Official Chess.com Published Data API docs (https://www.chess.com/news/view/published-data-api):
  * Archive endpoint: GET https://api.chess.com/pub/player/{username}/games/archives
  *   Returns JSON with an array of archive URLs sorted chronologically:
@@ -161,6 +179,16 @@ export function fetchUserGames(username, { max, since, until, delayMs = 200, sta
 
     for (const archiveUrl of reversedArchives) {
       if (max && count >= max) break;
+
+      const monthRange = getArchiveMonthRange(archiveUrl);
+      if (monthRange) {
+        if (untilMs !== null && monthRange.startMs > untilMs) {
+          continue;
+        }
+        if (sinceMs !== null && monthRange.endMs < sinceMs) {
+          break;
+        }
+      }
 
       if (delayMs > 0) {
         await sleep(delayMs);
