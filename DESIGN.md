@@ -129,11 +129,13 @@ All stored evals are **from White's perspective** in centipawns. For analysis, c
 
 - `perspective(cp, color) = color == white ? cp : -cp`
 - Forced mate: Stockfish returns `mate N` (positive = side to move mates). Map to a bounded score so arithmetic stays continuous:
-  - `mate_to_cp(n) = sign(n) * (MATE_CP - |n| * 10)` with `MATE_CP = 10000`, so a faster mate scores higher. Delivered mate is explicitly signed by mover color (`+MATE_CP` for White, `-MATE_CP` for Black).
+  - `mate_to_cp(n) = sign(n) * max(1000, MATE_CP - |n| * 10)` with `MATE_CP = 10000`, so a faster mate scores higher and even a very long mate never drops below the ±1000 cp cap. Delivered mate is explicitly signed by mover color (`+MATE_CP` for White, `-MATE_CP` for Black).
   - Raw mate distance is stored in `move_mates`.
 - **cp_loss** for a move = `perspective(eval_before) - perspective(eval_after)`, clamped at 0 from below.
 - Cap evals at ±1000 cp for loss calculation so blunders in already-decided positions are not over-penalized.
-- **Win probability** (for fair classification): `wp = 50 + 50 * (2 / (1 + exp(-0.00368208 * cp)) - 1)`. Classify on the **win-probability drop**, not raw cp.
+- **Win probability** (for fair classification): `wp = 50 + 50 * (2 / (1 + exp(-0.00368208 * cp)) - 1)`, computed on the capped eval. Classify on the **win-probability drop** (rounded to 2 decimals), not raw cp.
+  - Best: $\Delta WP < 1\%$
+  - Good: $1\% \le \Delta WP < 5\%$
   - Inaccuracy: $5\% \le \Delta WP < 10\%$
   - Mistake: $10\% \le \Delta WP < 20\%$
   - Blunder: $\Delta WP \ge 20\%$
