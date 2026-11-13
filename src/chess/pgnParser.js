@@ -368,6 +368,7 @@ function buildParsedGame(headers, moveText) {
   const externalId = computeExternalId(headers, moveText);
 
   return {
+    headers: { ...headers },
     externalId,
     white: headers.White || '?',
     black: headers.Black || '?',
