@@ -130,9 +130,26 @@ describe('import.service', () => {
     expect(jobClampedHigh.maxGames).toBe(500);
   });
 
-  it('rejects reversed dates with ValidationError', async () => {
+  it('rejects invalid or reversed dates with ValidationError and accepts valid ISO dates', async () => {
     await prisma.analysisJob.deleteMany({ where: { playerAccountId: account1.id } });
 
+    // Invalid since
+    await expect(
+      createImportJob(user1.id, {
+        accountId: account1.id,
+        since: 'abc',
+      })
+    ).rejects.toThrow(ValidationError);
+
+    // Invalid until
+    await expect(
+      createImportJob(user1.id, {
+        accountId: account1.id,
+        until: 'abc',
+      })
+    ).rejects.toThrow(ValidationError);
+
+    // Reversed dates: since > until
     await expect(
       createImportJob(user1.id, {
         accountId: account1.id,
@@ -140,6 +157,17 @@ describe('import.service', () => {
         until: '2023-06-01T00:00:00Z',
       })
     ).rejects.toThrow(ValidationError);
+
+    // Valid ISO strings create the job
+    const validJob = await createImportJob(user1.id, {
+      accountId: account1.id,
+      since: '2023-01-01T00:00:00Z',
+      until: '2023-02-01T00:00:00Z',
+    });
+    expect(validJob).toBeDefined();
+    expect(validJob.status).toBe('queued');
+    expect(new Date(validJob.since)).toEqual(new Date('2023-01-01T00:00:00Z'));
+    expect(new Date(validJob.until)).toEqual(new Date('2023-02-01T00:00:00Z'));
   });
 
   it('rejects with NotFoundError when accessing another user account or job', async () => {
