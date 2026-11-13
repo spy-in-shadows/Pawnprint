@@ -7,4 +7,4 @@ normalized PostgreSQL schema and turns them into longitudinal diagnostics and a 
 - Module contracts: see [docs/CONTRACTS.md](docs/CONTRACTS.md)
 - Engineering conventions: see [ENGINEERING.md](ENGINEERING.md)
 
-Status: repository skeleton only (prompt B1). No application code yet.
+Status: in development. Auth, games endpoints, PGN parsing, bulk ingestion, the engine client and the job queue are in place; the worker pipeline, analytics and training are not built yet.
