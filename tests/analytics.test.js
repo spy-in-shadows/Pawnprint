@@ -450,6 +450,7 @@ describe('Analytics part 1 & part 2: openings, phases, time pressure, trend, mot
 
     const expectedRolling = [100.0, 75.0, 50.0, 62.5, 70.0, 66.7, 71.4, 71.4, 64.3, 78.6];
     const expectedAcc = [100, 50, 0, 100, 100, 50, 100, 100, 0, 100];
+    const expectedCpLoss = [0, 50, 100, 0, 0, 50, 0, 0, 100, 0];
 
     for (let i = 0; i < 10; i++) {
       const dayNum = String(i + 1).padStart(2, '0');
@@ -500,8 +501,57 @@ describe('Analytics part 1 & part 2: openings, phases, time pressure, trend, mot
       expect(trendData[i].day).toBe(`2026-01-${dayNum}`);
       expect(trendData[i].games).toBe(1);
       expect(trendData[i].accuracyPct).toBe(expectedAcc[i]);
+      expect(trendData[i].avgCpLoss).toBe(expectedCpLoss[i]);
       expect(trendData[i].rollingAccuracyPct).toBe(expectedRolling[i]);
     }
+
+    // Gap test: Day 30 has a game played on 2026-01-30 (>6 days after 2026-01-10)
+    // Its 7-day rolling window must only include days between 2026-01-24 and 2026-01-30,
+    // so it must not include any of the earlier days (Day 1..10).
+    const gameAfterGap = await prisma.game.create({
+      data: {
+        playerAccountId: accountA.id,
+        platformId: platform.id,
+        externalId: 'trend_game_gap_30',
+        playedAt: new Date('2026-01-30T12:00:00Z'),
+        color: 'white',
+        resultId: resultWin.id,
+        totalPlies: 1,
+        analysisStatus: 'analyzed',
+      },
+    });
+    const moveGap = await prisma.move.create({
+      data: {
+        gameId: gameAfterGap.id,
+        ply: 1,
+        san: 'e4',
+        uci: 'e2e4',
+        fenBefore: 'fen',
+        moverColor: 'white',
+        phaseId: phaseOpening.id,
+      },
+    });
+    await prisma.moveClassification.create({
+      data: {
+        moveId: moveGap.id,
+        classificationId: classMistake.id,
+        cpLoss: 60,
+      },
+    });
+
+    const resGap = await fetch(`${baseUrl}/api/v1/analytics/trend`, {
+      headers: { Authorization: `Bearer ${tokenA}` },
+    });
+    expect(resGap.status).toBe(200);
+    const gapTrendData = await resGap.json();
+    expect(gapTrendData).toHaveLength(11);
+    const lastDay = gapTrendData[10];
+    expect(lastDay.day).toBe('2026-01-30');
+    expect(lastDay.accuracyPct).toBe(0);
+    expect(lastDay.avgCpLoss).toBe(60);
+    // If it were ROWS BETWEEN 6 PRECEDING, it would include previous 6 played days (averaging ~60-70%).
+    // With RANGE BETWEEN INTERVAL '6 days' PRECEDING, it only includes Jan 30 itself -> 0.0%.
+    expect(lastDay.rollingAccuracyPct).toBe(0);
 
     // Filter test: from day 8 to day 10
     const resFiltered = await fetch(
