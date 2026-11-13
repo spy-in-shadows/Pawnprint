@@ -75,7 +75,7 @@ Design rules: no JSON blobs for move data, no wide NULL-filled rows, every repea
 
 ### Jobs
 - `analysis_jobs(id, player_account_id, status, attempts, max_games, failed_games, skipped_games, since, until, locked_by, locked_at, heartbeat_at, error, created_at, finished_at)`
-- Partial unique index: `CREATE UNIQUE INDEX idx_analysis_jobs_active_account ON analysis_jobs(player_account_id) WHERE status IN ('queued', 'running');` ensures only one active import job per account.
+- Partial unique index: `CREATE UNIQUE INDEX idx_analysis_jobs_active_unique ON analysis_jobs(player_account_id) WHERE status IN ('queued', 'running');` ensures only one active import job per account.
 - `analysis_job_games(job_id, game_id, status, error)`: per-game progress so a crashed job can resume without re-analyzing completed games.
 
 ### Indexing guidance
