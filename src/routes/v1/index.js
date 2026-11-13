@@ -5,6 +5,7 @@ import importsRoutes from '../imports.routes.js';
 import uploadsRoutes from '../uploads.routes.js';
 import gamesRoutes from '../games.routes.js';
 import analyticsRoutes from '../analytics.routes.js';
+import trainingRoutes from '../training.routes.js';
 import * as authController from '../../controllers/auth.controller.js';
 import { authenticate } from '../../middleware/authenticate.js';
 
@@ -17,5 +18,6 @@ router.use('/imports', importsRoutes);
 router.use('/uploads', uploadsRoutes);
 router.use('/games', gamesRoutes);
 router.use('/analytics', analyticsRoutes);
+router.use('/training', trainingRoutes);
 
 export default router;
