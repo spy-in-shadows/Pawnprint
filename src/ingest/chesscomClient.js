@@ -203,7 +203,10 @@ export function fetchUserGames(username, { max, since, until, delayMs = 200, sta
       });
 
       if (!response.ok) {
-        continue;
+        if (response.status === 404) {
+          continue;
+        }
+        throw new Error(`Chess.com archive ${pgnUrl} returned status ${response.status}`);
       }
 
       const monthGames = [];
