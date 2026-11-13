@@ -94,7 +94,9 @@ export class StockfishClient {
   evaluatePosition(fen, depth = this.depth) {
     const check = validateFen(fen);
     if (!check.ok) return Promise.reject(new DataError(`Invalid FEN '${fen}': ${check.error}`));
-    return this._enqueue(() => this._search(fen.trim(), depth));
+    // validateFen accepts any whitespace between fields; _search reads the side to move by splitting on one space.
+    const normalized = fen.trim().split(/\s+/).join(' ');
+    return this._enqueue(() => this._search(normalized, depth));
   }
 
   async quit() {

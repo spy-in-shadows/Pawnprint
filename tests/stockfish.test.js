@@ -20,6 +20,8 @@ function fakeSpawn(commands) {
           commands.push(command);
           if (command === 'uci') child.stdout.write('id name Stockfish 17\nuciok\n');
           if (command === 'isready') child.stdout.write('readyok\n');
+          // Scores are relative to the side to move, as in real UCI output.
+          if (command.startsWith('go ')) child.stdout.write('info depth 8 score cp 150 pv e7e5\nbestmove e7e5\n');
         }
         done();
       },
@@ -51,6 +53,22 @@ describe('StockfishClient with a fake engine process', () => {
     await expect(engine.evaluatePosition('not a fen')).rejects.toMatchObject({ name: 'DataError', isDataError: true });
     await expect(engine.evaluatePosition('8/8/8/8/8/8/8/8 w - - 0 1')).rejects.toMatchObject({ name: 'DataError' });
     expect(commands).toEqual([]);
+    await engine.quit();
+  });
+
+  it('reads the side to move from a FEN with irregular whitespace and sends it normalized', async () => {
+    const commands = [];
+    const engine = new StockfishClient({ spawnFn: fakeSpawn(commands) });
+    await engine.init();
+    commands.length = 0;
+    const blackToMove = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR';
+    for (const fen of [`${blackToMove}  b KQkq - 0 1`, `${blackToMove}\tb KQkq - 0 1`]) {
+      await expect(engine.evaluatePosition(fen, 8)).resolves.toEqual({ evalCp: -150, mate: null, bestUci: 'e7e5', depth: 8 });
+    }
+    expect(commands.filter((c) => c.startsWith('position'))).toEqual([
+      `position fen ${blackToMove} b KQkq - 0 1`,
+      `position fen ${blackToMove} b KQkq - 0 1`,
+    ]);
     await engine.quit();
   });
 
