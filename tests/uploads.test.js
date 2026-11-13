@@ -16,6 +16,7 @@ describe('Uploads and Imports endpoints', () => {
 
   let lichessPlatform;
   let accountA;
+  let accountB;
 
   const validTwoGamesPgn = `[Event "Live Chess 1"]
 [Site "Chess.com"]
@@ -81,6 +82,14 @@ describe('Uploads and Imports endpoints', () => {
         userId: userA.id,
         platformId: lichessPlatform.id,
         username: `user_a_lichess_${Date.now()}`,
+      },
+    });
+
+    accountB = await prisma.playerAccount.create({
+      data: {
+        userId: userB.id,
+        platformId: lichessPlatform.id,
+        username: `user_b_lichess_${Date.now()}`,
       },
     });
   });
@@ -220,6 +229,109 @@ describe('Uploads and Imports endpoints', () => {
     expect(job2.id).toBe(job1.id);
   });
 
+  it('POST /imports validates accountId (missing, non-numeric, string conversion, out-of-range)', async () => {
+    // Missing accountId -> 400
+    const resMissing = await fetch(`${baseUrl}/api/v1/imports`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${tokenA}`,
+      },
+      body: JSON.stringify({}),
+    });
+    expect(resMissing.status).toBe(400);
+
+    // Non-numeric accountId -> 400
+    const resNonNumeric = await fetch(`${baseUrl}/api/v1/imports`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${tokenA}`,
+      },
+      body: JSON.stringify({ accountId: 'x' }),
+    });
+    expect(resNonNumeric.status).toBe(400);
+
+    // Non-integer float -> 400
+    const resFloat = await fetch(`${baseUrl}/api/v1/imports`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${tokenA}`,
+      },
+      body: JSON.stringify({ accountId: 1.5 }),
+    });
+    expect(resFloat.status).toBe(400);
+
+    // Boolean -> 400
+    const resBool = await fetch(`${baseUrl}/api/v1/imports`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${tokenA}`,
+      },
+      body: JSON.stringify({ accountId: true }),
+    });
+    expect(resBool.status).toBe(400);
+
+    // Object -> 400
+    const resObj = await fetch(`${baseUrl}/api/v1/imports`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${tokenA}`,
+      },
+      body: JSON.stringify({ accountId: {} }),
+    });
+    expect(resObj.status).toBe(400);
+
+    // Out-of-range accountId (overflow int4) -> 404
+    const resOutOfRange = await fetch(`${baseUrl}/api/v1/imports`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${tokenA}`,
+      },
+      body: JSON.stringify({ accountId: 99999999999 }),
+    });
+    expect(resOutOfRange.status).toBe(404);
+
+    // Negative / non-positive integer -> 404
+    const resNegative = await fetch(`${baseUrl}/api/v1/imports`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${tokenA}`,
+      },
+      body: JSON.stringify({ accountId: 0 }),
+    });
+    expect(resNegative.status).toBe(404);
+
+    // Foreign user's account ID as a string -> 404
+    const resForeign = await fetch(`${baseUrl}/api/v1/imports`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${tokenA}`,
+      },
+      body: JSON.stringify({ accountId: String(accountB.id) }),
+    });
+    expect(resForeign.status).toBe(404);
+
+    // Numeric string accountId converted to integer -> 202
+    const resNumericString = await fetch(`${baseUrl}/api/v1/imports`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${tokenA}`,
+      },
+      body: JSON.stringify({ accountId: String(accountA.id) }),
+    });
+    expect(resNumericString.status).toBe(202);
+    const bodyNumericString = await resNumericString.json();
+    expect(bodyNumericString.playerAccountId).toBe(accountA.id);
+  });
+
   it('POST /imports validates dates (reversed dates -> 400)', async () => {
     const res = await fetch(`${baseUrl}/api/v1/imports`, {
       method: 'POST',
@@ -267,5 +379,32 @@ describe('Uploads and Imports endpoints', () => {
       headers: { Authorization: `Bearer ${tokenB}` },
     });
     expect(resOther.status).toBe(404);
+  });
+
+  it('GET /imports/:id returns 404 for malformed or out-of-range job id', async () => {
+    const resNonNumeric = await fetch(`${baseUrl}/api/v1/imports/abc`, {
+      headers: { Authorization: `Bearer ${tokenA}` },
+    });
+    expect(resNonNumeric.status).toBe(404);
+
+    const resOutOfRange = await fetch(`${baseUrl}/api/v1/imports/99999999999`, {
+      headers: { Authorization: `Bearer ${tokenA}` },
+    });
+    expect(resOutOfRange.status).toBe(404);
+
+    const resZero = await fetch(`${baseUrl}/api/v1/imports/0`, {
+      headers: { Authorization: `Bearer ${tokenA}` },
+    });
+    expect(resZero.status).toBe(404);
+
+    const resNegative = await fetch(`${baseUrl}/api/v1/imports/-1`, {
+      headers: { Authorization: `Bearer ${tokenA}` },
+    });
+    expect(resNegative.status).toBe(404);
+
+    const resFloat = await fetch(`${baseUrl}/api/v1/imports/1.5`, {
+      headers: { Authorization: `Bearer ${tokenA}` },
+    });
+    expect(resFloat.status).toBe(404);
   });
 });

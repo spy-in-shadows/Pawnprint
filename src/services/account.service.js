@@ -2,6 +2,24 @@ import { prisma } from '../config/db.js';
 import { NotFoundError, ValidationError, ConflictError } from '../utils/errors.js';
 
 const VALID_PLATFORMS = ['lichess', 'chesscom', 'upload'];
+const INT4_MAX = 2147483647;
+
+export function parseIntId(value) {
+  if (value === undefined || value === null || value === '' || typeof value === 'boolean') {
+    return null;
+  }
+
+  if (typeof value === 'object') {
+    return null;
+  }
+
+  const num = Number(value);
+  if (!Number.isInteger(num) || num <= 0 || num > INT4_MAX) {
+    return null;
+  }
+
+  return num;
+}
 
 export async function listAccounts(userId) {
   return prisma.playerAccount.findMany({
@@ -67,8 +85,8 @@ export async function linkAccount(userId, { platform, username }) {
 }
 
 export async function deleteAccount(userId, accountId) {
-  const parsedId = Number(accountId);
-  if (!Number.isInteger(parsedId) || parsedId <= 0 || parsedId > 2147483647) {
+  const parsedId = parseIntId(accountId);
+  if (!parsedId) {
     throw new NotFoundError('Player account not found');
   }
 
@@ -86,6 +104,7 @@ export async function deleteAccount(userId, accountId) {
 }
 
 export const accountService = {
+  parseIntId,
   listAccounts,
   linkAccount,
   deleteAccount,

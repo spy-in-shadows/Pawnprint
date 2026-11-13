@@ -1,6 +1,7 @@
 import { prisma } from '../config/db.js';
 import { parsePgnString } from '../chess/pgnParser.js';
 import { ingestParsedGames, createImportJob } from './import.service.js';
+import { parseIntId } from './account.service.js';
 import { NotFoundError, ValidationError } from '../utils/errors.js';
 
 export async function processPgnUpload(user, { file, accountId }) {
@@ -32,8 +33,8 @@ export async function processPgnUpload(user, { file, accountId }) {
   let resolvedAccountId;
 
   if (accountId !== undefined && accountId !== null && accountId !== '') {
-    const parsedId = Number(accountId);
-    if (!Number.isInteger(parsedId) || parsedId <= 0 || parsedId > 2147483647) {
+    const parsedId = parseIntId(accountId);
+    if (!parsedId) {
       throw new NotFoundError('Player account not found');
     }
 
