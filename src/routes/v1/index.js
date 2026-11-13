@@ -1,5 +1,8 @@
 import express from 'express';
 import authRoutes from '../auth.routes.js';
+import accountsRoutes from '../accounts.routes.js';
+import importsRoutes from '../imports.routes.js';
+import uploadsRoutes from '../uploads.routes.js';
 import gamesRoutes from '../games.routes.js';
 import analyticsRoutes from '../analytics.routes.js';
 import * as authController from '../../controllers/auth.controller.js';
@@ -9,6 +12,9 @@ const router = express.Router();
 
 router.use('/auth', authRoutes);
 router.get('/me', authenticate, authController.me);
+router.use('/accounts', accountsRoutes);
+router.use('/imports', importsRoutes);
+router.use('/uploads', uploadsRoutes);
 router.use('/games', gamesRoutes);
 router.use('/analytics', analyticsRoutes);
 
