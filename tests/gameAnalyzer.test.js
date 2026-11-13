@@ -182,6 +182,47 @@ describe('analyzeGame', () => {
     expect(blunder.classification).toBe('blunder');
   });
 
+  it("tags motifs on a scripted blunder from the engine's best move and best reply", async () => {
+    // 2.Ba6?? drops the bishop to bxa6; the eval after 2.Ba6 carries Black's best reply.
+    const sans = ['e4', 'e5', 'Ba6'];
+    const engine = fakeEngine({
+      [fenAfter(sans.slice(0, 2))]: { evalCp: 30, mate: null, bestUci: 'g1f3', depth: 12 },
+      [fenAfter(sans)]: { evalCp: -300, mate: null, bestUci: 'b7a6', depth: 12 },
+    });
+    const rows = await analyzeGame({ moves: toMoves(sans) }, engine, { engineVersionId: 1 });
+
+    expect(rows[2]).toMatchObject({ classification: 'blunder', motifs: [{ name: 'hanging_piece', kind: 'allowed' }] });
+    expect(rows[0].motifs).toEqual([]);
+    expect(rows[1].motifs).toEqual([]);
+  });
+
+  it('adds missed_mate when a blunder throws away a forced mate', async () => {
+    const sans = ['e4', 'e5', 'Ba6'];
+    const engine = fakeEngine({
+      [fenAfter(sans.slice(0, 2))]: { evalCp: 9970, mate: 3, bestUci: 'g1f3', depth: 12 },
+      [fenAfter(sans)]: { evalCp: -300, mate: null, bestUci: 'b7a6', depth: 12 },
+    });
+    const rows = await analyzeGame({ moves: toMoves(sans) }, engine, { engineVersionId: 1 });
+
+    expect(rows[2].classification).toBe('blunder');
+    expect(rows[2].motifs).toEqual([
+      { name: 'hanging_piece', kind: 'allowed' },
+      { name: 'missed_mate', kind: 'missed' },
+    ]);
+  });
+
+  it('does not tag a forced mate that only gets longer', async () => {
+    const sans = ['e4', 'e5', 'Ba6'];
+    const engine = fakeEngine({
+      [fenAfter(sans.slice(0, 2))]: { evalCp: 9970, mate: 3, bestUci: 'g1f3', depth: 12 },
+      [fenAfter(sans)]: { evalCp: 9960, mate: 4, bestUci: 'b7a6', depth: 12 },
+    });
+    const rows = await analyzeGame({ moves: toMoves(sans) }, engine, { engineVersionId: 1 });
+
+    expect(rows[2].classification).toBe('best');
+    expect(rows[2].motifs).toEqual([]);
+  });
+
   it('ignores the stored fenBefore', async () => {
     const moves = toMoves(['e4', 'e5']).map((m) => ({ ...m, fenBefore: 'not a fen at all' }));
     const engine = fakeEngine();

@@ -1,12 +1,14 @@
 import { Chess } from 'chess.js';
 import { evaluateMoveQuality, mateToCp } from '../chess/evalMath.js';
 import { validateFen } from '../chess/fen.js';
+import { detectMotifs, isMissedMate } from '../chess/motifs.js';
 import { DataError } from '../utils/errors.js';
 
 // Terminal positions are resolved from the board, never by the engine. They are stored with
 // bestUci 'none' and depth 0, which is how readers tell them apart from searched positions.
 const TERMINAL_BEST_UCI = 'none';
 const TERMINAL_DEPTH = 0;
+const MOTIF_CLASSIFICATIONS = new Set(['mistake', 'blunder']);
 
 function terminalEval(board, moverColor) {
   if (board.isCheckmate()) {
@@ -41,6 +43,7 @@ function applyMove(board, { san, uci }, ply) {
   if (!played) {
     throw new DataError(`Illegal or unparseable move '${san ?? ''}' (uci '${uci ?? ''}') at ply ${ply}`);
   }
+  return played.from + played.to + (played.promotion ?? '');
 }
 
 async function evaluateStart(board, engine, engineVersionId, startCache) {
@@ -63,8 +66,9 @@ export async function analyzeGame({ moves }, engine, { engineVersionId, startCac
     const move = moves[i];
     const ply = move.ply ?? i + 1;
     const moverColor = board.turn() === 'w' ? 'white' : 'black';
+    const fenBefore = board.fen();
 
-    applyMove(board, move, ply);
+    const moveUci = applyMove(board, move, ply);
     const fenAfter = checkedFen(board, ply);
     const after = terminalEval(board, moverColor) ?? (await engine.evaluatePosition(fenAfter));
 
@@ -73,6 +77,22 @@ export async function analyzeGame({ moves }, engine, { engineVersionId, startCac
       evalAfterCp: after.evalCp,
       moverColor,
     });
+    const mateBefore = before.mate ?? null;
+    const mateAfter = after.mate ?? null;
+
+    // The after position's best move is the opponent's best reply, from the same N + 1 search.
+    const motifs = detectMotifs({
+      fenBefore,
+      fenAfter,
+      moveUci,
+      bestUci: before.bestUci,
+      bestReplyUci: after.bestUci,
+      classification,
+    });
+    // Motifs are only tagged on mistakes and blunders (DESIGN.md section 9), missed mates included.
+    if (MOTIF_CLASSIFICATIONS.has(classification) && isMissedMate(mateBefore, mateAfter, moverColor)) {
+      motifs.push({ name: 'missed_mate', kind: 'missed' });
+    }
 
     rows.push({
       ply,
@@ -80,11 +100,11 @@ export async function analyzeGame({ moves }, engine, { engineVersionId, startCac
       evalAfterCp: after.evalCp,
       bestUci: before.bestUci,
       depth: before.depth,
-      mateBefore: before.mate ?? null,
-      mateAfter: after.mate ?? null,
+      mateBefore,
+      mateAfter,
       cpLoss,
       classification,
-      motifs: [],
+      motifs,
     });
     before = after;
   }
