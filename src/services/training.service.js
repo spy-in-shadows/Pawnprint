@@ -3,13 +3,14 @@ import * as analyticsRepo from '../repositories/analytics.repo.js';
 import { prepareDrill } from './drill.js';
 import { NotFoundError } from '../utils/errors.js';
 
-export async function listPlans(userId) {
-  const plans = await trainingRepo.listUserPlans(userId);
-  return plans.map((plan) => ({
+export function toPlanDto(plan) {
+  if (!plan) return null;
+
+  return {
     id: plan.id,
     userId: plan.userId,
     createdAt: plan.createdAt,
-    items: plan.items.map((item) => {
+    items: (plan.items || []).map((item) => {
       let drill = null;
       if (item.puzzle) {
         try {
@@ -39,7 +40,12 @@ export async function listPlans(userId) {
         drill,
       };
     }),
-  }));
+  };
+}
+
+export async function listPlans(userId) {
+  const plans = await trainingRepo.listUserPlans(userId);
+  return plans.map(toPlanDto);
 }
 
 export async function generatePlan(userId) {
@@ -55,12 +61,7 @@ export async function generatePlan(userId) {
   if (weakestMotifs.length === 0 && weakestOpeningPhases.length === 0) {
     const plan = await trainingRepo.createPlanWithItems(userId, []);
     return {
-      plan: {
-        id: plan.id,
-        userId: plan.userId,
-        createdAt: plan.createdAt,
-        items: [],
-      },
+      plan: toPlanDto(plan),
       message: 'import and analyze more games to identify weaknesses',
     };
   }
@@ -118,40 +119,7 @@ export async function generatePlan(userId) {
   }
 
   const response = {
-    plan: {
-      id: plan.id,
-      userId: plan.userId,
-      createdAt: plan.createdAt,
-      items: plan.items.map((item) => {
-        let drill = null;
-        if (item.puzzle) {
-          try {
-            drill = prepareDrill(item.puzzle);
-          } catch {
-            drill = null;
-          }
-        }
-        return {
-          id: item.id,
-          planId: item.planId,
-          puzzleId: item.puzzleId,
-          motifId: item.motifId,
-          reasonCode: item.reasonCode,
-          completedAt: item.completedAt,
-          puzzle: item.puzzle
-            ? {
-                id: item.puzzle.id,
-                lichessId: item.puzzle.lichessId,
-                fen: item.puzzle.fen,
-                movesUci: item.puzzle.movesUci,
-                rating: item.puzzle.rating,
-                phaseTag: item.puzzle.phaseTag,
-              }
-            : null,
-          drill,
-        };
-      }),
-    },
+    plan: toPlanDto(plan),
   };
 
   if (message) {
@@ -190,6 +158,7 @@ export async function setItemCompletion(userId, planId, itemId, completed) {
 }
 
 export const trainingService = {
+  toPlanDto,
   listPlans,
   generatePlan,
   setItemCompletion,
