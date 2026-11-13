@@ -627,6 +627,43 @@ describe('chesscomClient', () => {
     expect(requestedUrls).toHaveLength(2);
   });
 
+  it('yields Chess.com games newest first within a single month archive', async () => {
+    const gameMay01 = sampleStandardPgn.replace(/Player1/g, 'PlayerMay01').replace(/2023\.05\.01/g, '2023.05.01');
+    const gameMay15 = sampleStandardPgn.replace(/Player1/g, 'PlayerMay15').replace(/2023\.05\.01/g, '2023.05.15');
+    const gameMay30 = sampleStandardPgn.replace(/Player1/g, 'PlayerMay30').replace(/2023\.05\.01/g, '2023.05.30');
+
+    // Archive lists games oldest first: May 01, May 15, May 30
+    const oldestFirstPgn = `${gameMay01}\n\n${gameMay15}\n\n${gameMay30}`;
+
+    globalThis.fetch = vi.fn(async (url) => {
+      if (url.includes('/games/archives')) {
+        return {
+          status: 200,
+          ok: true,
+          headers: { 'content-type': 'application/json' },
+          json: async () => ({
+            archives: ['https://api.chess.com/pub/player/erik/games/2023/05'],
+          }),
+        };
+      }
+      return {
+        status: 200,
+        ok: true,
+        headers: { 'content-type': 'application/x-chess-pgn' },
+        text: async () => oldestFirstPgn,
+      };
+    });
+
+    const games = [];
+    for await (const g of fetchChesscomGames('erik', { max: 2, delayMs: 0 })) {
+      games.push(g);
+    }
+
+    expect(games).toHaveLength(2);
+    expect(games[0].white).toBe('PlayerMay30');
+    expect(games[1].white).toBe('PlayerMay15');
+  });
+
   it('filters games by since and until dates in Chess.com archives', async () => {
     globalThis.fetch = vi.fn(async (url) => {
       if (url.includes('/games/archives')) {

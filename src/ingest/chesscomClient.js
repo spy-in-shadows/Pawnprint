@@ -178,8 +178,25 @@ export function fetchUserGames(username, { max, since, until, delayMs = 200, sta
         continue;
       }
 
+      const monthGames = [];
       for await (const game of streamArchiveGames(response)) {
-        const gameTime = game.playedAt instanceof Date ? game.playedAt.getTime() : null;
+        monthGames.push(game);
+      }
+
+      monthGames.sort((a, b) => {
+        const timeA = a.playedAt instanceof Date && !Number.isNaN(a.playedAt.getTime()) ? a.playedAt.getTime() : null;
+        const timeB = b.playedAt instanceof Date && !Number.isNaN(b.playedAt.getTime()) ? b.playedAt.getTime() : null;
+
+        if (timeA === null && timeB === null) return 0;
+        if (timeA === null) return 1;
+        if (timeB === null) return -1;
+        return timeB - timeA;
+      });
+
+      for (const game of monthGames) {
+        const gameTime = game.playedAt instanceof Date && !Number.isNaN(game.playedAt.getTime())
+          ? game.playedAt.getTime()
+          : null;
 
         if (untilMs !== null && gameTime !== null && gameTime > untilMs) {
           continue;
