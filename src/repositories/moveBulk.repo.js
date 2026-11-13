@@ -139,10 +139,8 @@ export async function insertGameWithMoves(accountId, parsedGame) {
     let analysisStatus = 'pending';
     let failureReason = null;
 
-    if (parsedGame.parseError && hasNoMoves) {
+    if (parsedGame.parseError) {
       analysisStatus = 'failed';
-      failureReason = parsedGame.parseError;
-    } else if (parsedGame.parseError) {
       failureReason = parsedGame.parseError;
     }
 
