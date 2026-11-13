@@ -1,7 +1,22 @@
+import pg from 'pg';
 import { pgPool } from '../config/db.js';
 import config from '../config/env.js';
 
 const MAX_ATTEMPTS = 3;
+const TIMESTAMP_OID = 1114;
+
+// Timestamp columns hold UTC wall-clock values (Prisma's convention), but pg parses them in the
+// host's local zone. Job rows are read with this parser so since/until match what Prisma wrote.
+const utcTypes = {
+  getTypeParser(oid, format) {
+    if (oid === TIMESTAMP_OID) return (value) => new Date(`${value.replace(' ', 'T')}Z`);
+    return pg.types.getTypeParser(oid, format);
+  },
+};
+
+function queryJobs(text, values) {
+  return pgPool.query({ text, values, types: utcTypes });
+}
 
 function toJob(row) {
   if (!row) return null;
@@ -77,7 +92,7 @@ const CLAIM_SQL = `
 
 export async function claimNextJob(workerId) {
   await sweepPoisonJobs();
-  const { rows } = await pgPool.query(CLAIM_SQL, [workerId, config.jobStaleSeconds]);
+  const { rows } = await queryJobs(CLAIM_SQL, [workerId, config.jobStaleSeconds]);
   return toJob(rows[0]);
 }
 
@@ -95,7 +110,7 @@ export async function heartbeat(jobId) {
 // a live worker and is left alone; it is only swept once that worker stops
 // heartbeating.
 export async function sweepPoisonJobs(maxAttempts = MAX_ATTEMPTS) {
-  const { rows } = await pgPool.query(
+  const { rows } = await queryJobs(
     `UPDATE analysis_jobs
      SET status = 'failed',
          error = 'Exceeded ' || $1::int || ' attempts' || COALESCE(': ' || error, ''),
@@ -126,7 +141,7 @@ export async function updateGameProgress(jobId, gameId, status, error = null) {
 }
 
 export async function markJobFinished(jobId, { failedGames = 0, skippedGames = 0 } = {}) {
-  const { rows } = await pgPool.query(
+  const { rows } = await queryJobs(
     `UPDATE analysis_jobs
      SET status = 'completed',
          finished_at = (NOW() AT TIME ZONE 'UTC'),
@@ -140,7 +155,7 @@ export async function markJobFinished(jobId, { failedGames = 0, skippedGames = 0
 }
 
 export async function markJobFailed(jobId, message) {
-  const { rows } = await pgPool.query(
+  const { rows } = await queryJobs(
     `UPDATE analysis_jobs
      SET status = 'failed',
          error = $2,
