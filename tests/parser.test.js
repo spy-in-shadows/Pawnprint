@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi, afterEach } from 'vitest';
 import { Readable } from 'stream';
 import {
   parseClockToMs,
@@ -7,6 +7,9 @@ import {
   parsePgnString,
   tokenizeMoveText,
 } from '../src/chess/pgnParser.js';
+import { isStandardChess } from '../src/ingest/standardChess.js';
+import { fetchUserGames as fetchLichessGames, lichessClient } from '../src/ingest/lichessClient.js';
+import { fetchUserGames as fetchChesscomGames, chesscomClient } from '../src/ingest/chesscomClient.js';
 
 describe('pgnParser clock and time control helpers', () => {
   it('parses clock strings into milliseconds', () => {
@@ -310,5 +313,457 @@ describe('pgnParser PGN parsing', () => {
     expect(games[0].parseError).toBe('Invalid start FEN: invalid/fen/string w - - 0 1');
     expect(games[0].moves).toEqual([]);
     expect(games[0].totalPlies).toBe(0);
+  });
+});
+
+const sampleStandardPgn = `[Event "Live Chess"]
+[Site "https://lichess.org/std1"]
+[Date "2023.05.01"]
+[UTCDate "2023.05.01"]
+[UTCTime "12:00:00"]
+[White "Player1"]
+[Black "Player2"]
+[Result "1-0"]
+[Variant "Standard"]
+
+1. e4 e5 2. Nf3 Nc6 1-0`;
+
+const sampleStandardPgn2 = `[Event "Live Chess 2"]
+[Site "https://lichess.org/std2"]
+[Date "2023.05.02"]
+[UTCDate "2023.05.02"]
+[UTCTime "12:00:00"]
+[White "Player3"]
+[Black "Player4"]
+[Result "0-1"]
+
+1. d4 d5 2. c4 e6 0-1`;
+
+const sampleStandardPgn3 = `[Event "Live Chess 3"]
+[Site "https://lichess.org/std3"]
+[Date "2023.05.03"]
+[UTCDate "2023.05.03"]
+[UTCTime "12:00:00"]
+[White "Player5"]
+[Black "Player6"]
+[Result "1/2-1/2"]
+
+1. c4 c5 1/2-1/2`;
+
+const sampleCrazyhousePgn = `[Event "Crazyhouse"]
+[Site "https://lichess.org/crazy1"]
+[Date "2023.05.01"]
+[UTCDate "2023.05.01"]
+[UTCTime "12:00:00"]
+[White "CrazyPlayer"]
+[Black "OtherPlayer"]
+[Result "1-0"]
+[Variant "Crazyhouse"]
+
+1. e4 e5 1-0`;
+
+const sampleCustomFenPgn = `[Event "Custom FEN"]
+[Site "https://lichess.org/custom1"]
+[Date "2023.05.01"]
+[UTCDate "2023.05.01"]
+[UTCTime "12:00:00"]
+[White "CustomPlayer"]
+[Black "OtherPlayer"]
+[Result "1-0"]
+[SetUp "1"]
+[FEN "8/8/8/8/8/8/4K3/4k3 w - - 0 1"]
+
+1. Ke3 Kd1 1-0`;
+
+describe('isStandardChess helper', () => {
+  it('accepts games with standard variant or default FEN', () => {
+    expect(isStandardChess({ headers: { Variant: 'Standard' } })).toBe(true);
+    expect(isStandardChess({ headers: { Variant: 'standard' } })).toBe(true);
+    expect(isStandardChess({ headers: { Variant: 'Chess' } })).toBe(true);
+    expect(isStandardChess({ headers: { Variant: 'chess' } })).toBe(true);
+    expect(isStandardChess({ headers: {} })).toBe(true);
+    expect(isStandardChess({ headers: { FEN: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1' } })).toBe(true);
+  });
+
+  it('rejects games with non-standard variants', () => {
+    expect(isStandardChess({ headers: { Variant: 'Crazyhouse' } })).toBe(false);
+    expect(isStandardChess({ headers: { Variant: 'Chess960' } })).toBe(false);
+    expect(isStandardChess({ headers: { variant: 'threeCheck' } })).toBe(false);
+    expect(isStandardChess({ headers: { Variant: 'King of the Hill' } })).toBe(false);
+  });
+
+  it('rejects games with non-standard initial FEN or SetUp 1', () => {
+    expect(isStandardChess({ headers: { FEN: '8/8/8/8/8/8/4K3/4k3 w - - 0 1' } })).toBe(false);
+    expect(isStandardChess({ headers: { SetUp: '1' } })).toBe(false);
+    expect(isStandardChess({ headers: { SetUp: 1 } })).toBe(false);
+  });
+
+  it('returns false for null or undefined game input', () => {
+    expect(isStandardChess(null)).toBe(false);
+    expect(isStandardChess(undefined)).toBe(false);
+  });
+});
+
+describe('lichessClient', () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.useRealTimers();
+  });
+
+  it('honors Retry-After on 429 with fake timers and succeeds on retry', async () => {
+    vi.useFakeTimers();
+    let attempts = 0;
+    globalThis.fetch = vi.fn(async () => {
+      attempts++;
+      if (attempts === 1) {
+        return {
+          status: 429,
+          ok: false,
+          headers: { 'retry-after': '3' },
+        };
+      }
+      return {
+        status: 200,
+        ok: true,
+        headers: { 'content-type': 'application/x-chess-pgn' },
+        text: async () => sampleStandardPgn,
+      };
+    });
+
+    const runPromise = (async () => {
+      const games = [];
+      for await (const g of fetchLichessGames('player1', { max: 1 })) {
+        games.push(g);
+      }
+      return games;
+    })();
+
+    await vi.advanceTimersByTimeAsync(3000);
+    const result = await runPromise;
+
+    expect(attempts).toBe(2);
+    expect(result).toHaveLength(1);
+    expect(result[0].white).toBe('Player1');
+  });
+
+  it('retries up to 3 times on 429 with exponential backoff and throws', async () => {
+    vi.useFakeTimers();
+    let attempts = 0;
+    globalThis.fetch = vi.fn(async () => {
+      attempts++;
+      return {
+        status: 429,
+        ok: false,
+        headers: { 'retry-after': '1' },
+      };
+    });
+
+    const runPromise = (async () => {
+      const games = [];
+      for await (const g of fetchLichessGames('player1')) {
+        games.push(g);
+      }
+      return games;
+    })();
+
+    const catchPromise = runPromise.catch((err) => err);
+
+    // attempt 0 retry: wait 1 * 1000 * 1 = 1000ms
+    await vi.advanceTimersByTimeAsync(1000);
+    // attempt 1 retry: wait 1 * 1000 * 2 = 2000ms
+    await vi.advanceTimersByTimeAsync(2000);
+    // attempt 2 retry: wait 1 * 1000 * 4 = 4000ms
+    await vi.advanceTimersByTimeAsync(4000);
+
+    const err = await catchPromise;
+    expect(err).toBeInstanceOf(Error);
+    expect(err.message).toContain('429');
+    expect(attempts).toBe(4);
+  });
+
+  it('respects max, since and until bounds', async () => {
+    let requestedUrl = null;
+    globalThis.fetch = vi.fn(async (url) => {
+      requestedUrl = url;
+      const multiGamePgn = `${sampleStandardPgn}\n\n${sampleStandardPgn2}\n\n${sampleStandardPgn3}`;
+      return {
+        status: 200,
+        ok: true,
+        headers: { 'content-type': 'application/x-chess-pgn' },
+        text: async () => multiGamePgn,
+      };
+    });
+
+    const sinceDate = new Date('2023-01-01T00:00:00Z');
+    const untilDate = new Date('2023-12-31T23:59:59Z');
+
+    const games = [];
+    for await (const g of fetchLichessGames('player1', { max: 2, since: sinceDate, until: untilDate })) {
+      games.push(g);
+    }
+
+    expect(games).toHaveLength(2);
+    expect(requestedUrl).toContain('max=2');
+    expect(requestedUrl).toContain(`since=${sinceDate.getTime()}`);
+    expect(requestedUrl).toContain(`until=${untilDate.getTime()}`);
+    expect(requestedUrl).toContain('clocks=true');
+    expect(requestedUrl).toContain('opening=true');
+  });
+
+  it('skips variants and custom-FEN games, tracking count in stats.skippedGames', async () => {
+    const combinedPgn = `${sampleStandardPgn}\n\n${sampleCrazyhousePgn}\n\n${sampleCustomFenPgn}\n\n${sampleStandardPgn2}`;
+    globalThis.fetch = vi.fn(async () => ({
+      status: 200,
+      ok: true,
+      headers: { 'content-type': 'application/x-chess-pgn' },
+      text: async () => combinedPgn,
+    }));
+
+    const stats = {};
+    const games = [];
+    for await (const g of fetchLichessGames('player1', { stats })) {
+      games.push(g);
+    }
+
+    expect(games).toHaveLength(2);
+    expect(games[0].white).toBe('Player1');
+    expect(games[1].white).toBe('Player3');
+    expect(stats.skippedGames).toBe(2);
+  });
+
+  it('resets stats.skippedGames between consecutive runs', async () => {
+    const combinedPgnWithVariants = `${sampleStandardPgn}\n\n${sampleCrazyhousePgn}`;
+    const cleanStandardPgn = `${sampleStandardPgn}`;
+
+    let callCount = 0;
+    globalThis.fetch = vi.fn(async () => {
+      callCount++;
+      return {
+        status: 200,
+        ok: true,
+        headers: { 'content-type': 'application/x-chess-pgn' },
+        text: async () => (callCount === 1 ? combinedPgnWithVariants : cleanStandardPgn),
+      };
+    });
+
+    const stats = {};
+
+    const run1Games = [];
+    for await (const g of fetchLichessGames('player1', { stats })) {
+      run1Games.push(g);
+    }
+    expect(run1Games).toHaveLength(1);
+    expect(stats.skippedGames).toBe(1);
+
+    const run2Games = [];
+    for await (const g of fetchLichessGames('player1', { stats })) {
+      run2Games.push(g);
+    }
+    expect(run2Games).toHaveLength(1);
+    expect(stats.skippedGames).toBe(0);
+  });
+
+  it('exports lichessClient object with fetchUserGames and isStandardChess', () => {
+    expect(typeof lichessClient.fetchUserGames).toBe('function');
+    expect(typeof lichessClient.isStandardChess).toBe('function');
+  });
+});
+
+describe('chesscomClient', () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.useRealTimers();
+  });
+
+  it('walks Chess.com archives newest to oldest and stops once max is reached', async () => {
+    const requestedUrls = [];
+    globalThis.fetch = vi.fn(async (url) => {
+      requestedUrls.push(url);
+      if (url.includes('/games/archives')) {
+        return {
+          status: 200,
+          ok: true,
+          headers: { 'content-type': 'application/json' },
+          json: async () => ({
+            archives: [
+              'https://api.chess.com/pub/player/erik/games/2023/01',
+              'https://api.chess.com/pub/player/erik/games/2023/02',
+              'https://api.chess.com/pub/player/erik/games/2023/03',
+            ],
+          }),
+        };
+      }
+      if (url.includes('/2023/03/pgn')) {
+        return {
+          status: 200,
+          ok: true,
+          headers: { 'content-type': 'application/x-chess-pgn' },
+          text: async () => `${sampleStandardPgn}\n\n${sampleStandardPgn2}`,
+        };
+      }
+      if (url.includes('/2023/02/pgn')) {
+        return {
+          status: 200,
+          ok: true,
+          headers: { 'content-type': 'application/x-chess-pgn' },
+          text: async () => sampleStandardPgn3,
+        };
+      }
+      return { status: 404, ok: false };
+    });
+
+    const games = [];
+    for await (const g of fetchChesscomGames('erik', { max: 2, delayMs: 0 })) {
+      games.push(g);
+    }
+
+    expect(games).toHaveLength(2);
+    expect(requestedUrls[0]).toContain('/games/archives');
+    expect(requestedUrls[1]).toContain('/2023/03/pgn');
+    expect(requestedUrls).toHaveLength(2);
+  });
+
+  it('filters games by since and until dates in Chess.com archives', async () => {
+    globalThis.fetch = vi.fn(async (url) => {
+      if (url.includes('/games/archives')) {
+        return {
+          status: 200,
+          ok: true,
+          headers: { 'content-type': 'application/json' },
+          json: async () => ({
+            archives: ['https://api.chess.com/pub/player/erik/games/2023/05'],
+          }),
+        };
+      }
+      const gameEarly = sampleStandardPgn; // 2023.05.01
+      const gameMid = sampleStandardPgn2.replace(/2023\.05\.02/g, '2023.05.10');
+      const gameLate = sampleStandardPgn3.replace(/2023\.05\.03/g, '2023.05.20');
+      return {
+        status: 200,
+        ok: true,
+        headers: { 'content-type': 'application/x-chess-pgn' },
+        text: async () => `${gameEarly}\n\n${gameMid}\n\n${gameLate}`,
+      };
+    });
+
+    const since = new Date('2023-05-05T00:00:00Z');
+    const until = new Date('2023-05-15T00:00:00Z');
+
+    const games = [];
+    for await (const g of fetchChesscomGames('erik', { since, until, delayMs: 0 })) {
+      games.push(g);
+    }
+
+    expect(games).toHaveLength(1);
+    expect(games[0].white).toBe('Player3');
+  });
+
+  it('handles 429 Retry-After on Chess.com requests with fake timers', async () => {
+    vi.useFakeTimers();
+    let archiveAttempts = 0;
+    globalThis.fetch = vi.fn(async (url) => {
+      if (url.includes('/games/archives')) {
+        archiveAttempts++;
+        if (archiveAttempts === 1) {
+          return {
+            status: 429,
+            ok: false,
+            headers: { 'retry-after': '2' },
+          };
+        }
+        return {
+          status: 200,
+          ok: true,
+          headers: { 'content-type': 'application/json' },
+          json: async () => ({
+            archives: ['https://api.chess.com/pub/player/erik/games/2023/05'],
+          }),
+        };
+      }
+      return {
+        status: 200,
+        ok: true,
+        headers: { 'content-type': 'application/x-chess-pgn' },
+        text: async () => sampleStandardPgn,
+      };
+    });
+
+    const runPromise = (async () => {
+      const games = [];
+      for await (const g of fetchChesscomGames('erik', { delayMs: 0 })) {
+        games.push(g);
+      }
+      return games;
+    })();
+
+    await vi.advanceTimersByTimeAsync(2000);
+    const games = await runPromise;
+
+    expect(archiveAttempts).toBe(2);
+    expect(games).toHaveLength(1);
+  });
+
+  it('skips variants and resets stats.skippedGames between runs in Chess.com', async () => {
+    globalThis.fetch = vi.fn(async (url) => {
+      if (url.includes('/games/archives')) {
+        return {
+          status: 200,
+          ok: true,
+          headers: { 'content-type': 'application/json' },
+          json: async () => ({
+            archives: ['https://api.chess.com/pub/player/erik/games/2023/05'],
+          }),
+        };
+      }
+      return {
+        status: 200,
+        ok: true,
+        headers: { 'content-type': 'application/x-chess-pgn' },
+        text: async () => `${sampleStandardPgn}\n\n${sampleCrazyhousePgn}`,
+      };
+    });
+
+    const stats = {};
+    const run1 = [];
+    for await (const g of fetchChesscomGames('erik', { stats, delayMs: 0 })) {
+      run1.push(g);
+    }
+    expect(run1).toHaveLength(1);
+    expect(stats.skippedGames).toBe(1);
+
+    globalThis.fetch = vi.fn(async (url) => {
+      if (url.includes('/games/archives')) {
+        return {
+          status: 200,
+          ok: true,
+          headers: { 'content-type': 'application/json' },
+          json: async () => ({
+            archives: ['https://api.chess.com/pub/player/erik/games/2023/05'],
+          }),
+        };
+      }
+      return {
+        status: 200,
+        ok: true,
+        headers: { 'content-type': 'application/x-chess-pgn' },
+        text: async () => sampleStandardPgn,
+      };
+    });
+
+    const run2 = [];
+    for await (const g of fetchChesscomGames('erik', { stats, delayMs: 0 })) {
+      run2.push(g);
+    }
+    expect(run2).toHaveLength(1);
+    expect(stats.skippedGames).toBe(0);
+  });
+
+  it('exports chesscomClient object with fetchUserGames and isStandardChess', () => {
+    expect(typeof chesscomClient.fetchUserGames).toBe('function');
+    expect(typeof chesscomClient.isStandardChess).toBe('function');
   });
 });
