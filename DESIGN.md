@@ -43,7 +43,7 @@ Design rules: no JSON blobs for move data, no wide NULL-filled rows, every repea
 
 ### Identity
 - `users(id, email, password_hash, created_at)`
-- `player_accounts(id, user_id, platform_id, username, UNIQUE(platform_id, username))`
+- `player_accounts(id, user_id, platform_id, username, last_synced_at, created_at, UNIQUE(platform_id, username))`
 - `platforms(id, name)`: lichess, chesscom, upload
 
 ### Games
@@ -68,7 +68,7 @@ Design rules: no JSON blobs for move data, no wide NULL-filled rows, every repea
 - `move_motifs(move_id, motif_id, kind, PRIMARY KEY(move_id, motif_id, kind))`: records tactical motifs with `kind='allowed'` (player's move allowed an opponent tactic) or `kind='missed'` (player's best move would have executed a tactic/mate).
 
 ### Training
-- `puzzles(id, lichess_id, fen, moves_uci, rating)`: imported from the Lichess puzzle CSV
+- `puzzles(id, lichess_id UNIQUE, fen, moves_uci, rating, phase_tag)`: imported from the Lichess puzzle CSV
 - `puzzle_motifs(puzzle_id, motif_id)`: from the puzzle themes column
 - `training_plans(id, user_id, created_at)`
 - `training_plan_items(id, plan_id, puzzle_id, motif_id, reason_code, completed_at)`
