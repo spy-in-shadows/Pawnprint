@@ -664,6 +664,48 @@ describe('chesscomClient', () => {
     expect(games[1].white).toBe('PlayerMay15');
   });
 
+  it('limits the Chess.com archive walk to the since/until range', async () => {
+    const requestedUrls = [];
+    globalThis.fetch = vi.fn(async (url) => {
+      requestedUrls.push(url);
+      if (url.includes('/games/archives')) {
+        return {
+          status: 200,
+          ok: true,
+          headers: { 'content-type': 'application/json' },
+          json: async () => ({
+            archives: [
+              'https://api.chess.com/pub/player/erik/games/2023/01',
+              'https://api.chess.com/pub/player/erik/games/2023/02',
+              'https://api.chess.com/pub/player/erik/games/2023/03',
+              'https://api.chess.com/pub/player/erik/games/2023/04',
+            ],
+          }),
+        };
+      }
+      return {
+        status: 200,
+        ok: true,
+        headers: { 'content-type': 'application/x-chess-pgn' },
+        text: async () => sampleStandardPgn,
+      };
+    });
+
+    const since = new Date('2023-03-10T12:00:00Z');
+    const until = new Date('2023-04-15T12:00:00Z');
+
+    const games = [];
+    for await (const g of fetchChesscomGames('erik', { since, until, delayMs: 0 })) {
+      games.push(g);
+    }
+
+    expect(requestedUrls).toEqual([
+      'https://api.chess.com/pub/player/erik/games/archives',
+      'https://api.chess.com/pub/player/erik/games/2023/04/pgn',
+      'https://api.chess.com/pub/player/erik/games/2023/03/pgn',
+    ]);
+  });
+
   it('filters games by since and until dates in Chess.com archives', async () => {
     globalThis.fetch = vi.fn(async (url) => {
       if (url.includes('/games/archives')) {
