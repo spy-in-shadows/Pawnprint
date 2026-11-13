@@ -339,4 +339,95 @@ describe('Training plan generator and endpoints', () => {
     );
     expect(resPatchOther.status).toBe(404);
   });
+
+  it('validates planId and itemId on PATCH (non-numeric and out-of-range -> 404)', async () => {
+    // Non-numeric planId
+    const resNonNumPlan = await fetch(`${baseUrl}/api/v1/training/plans/abc/items/1`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${tokenA}`,
+      },
+      body: JSON.stringify({ completed: true }),
+    });
+    expect(resNonNumPlan.status).toBe(404);
+    const bodyNonNumPlan = await resNonNumPlan.json();
+    expect(bodyNonNumPlan.error.message).toBe('Training plan not found');
+
+    // Out-of-range planId
+    const resOverPlan = await fetch(`${baseUrl}/api/v1/training/plans/99999999999/items/1`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${tokenA}`,
+      },
+      body: JSON.stringify({ completed: true }),
+    });
+    expect(resOverPlan.status).toBe(404);
+    const bodyOverPlan = await resOverPlan.json();
+    expect(bodyOverPlan.error.message).toBe('Training plan not found');
+
+    // Non-numeric itemId
+    const resNonNumItem = await fetch(`${baseUrl}/api/v1/training/plans/1/items/abc`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${tokenA}`,
+      },
+      body: JSON.stringify({ completed: true }),
+    });
+    expect(resNonNumItem.status).toBe(404);
+    const bodyNonNumItem = await resNonNumItem.json();
+    expect(bodyNonNumItem.error.message).toBe('Training plan item not found');
+
+    // Out-of-range itemId
+    const resOverItem = await fetch(`${baseUrl}/api/v1/training/plans/1/items/99999999999`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${tokenA}`,
+      },
+      body: JSON.stringify({ completed: true }),
+    });
+    expect(resOverItem.status).toBe(404);
+    const bodyOverItem = await resOverItem.json();
+    expect(bodyOverItem.error.message).toBe('Training plan item not found');
+  });
+
+  it('validates completed body parameter on PATCH (must be boolean -> 400)', async () => {
+    // Missing body or empty object
+    const resEmpty = await fetch(`${baseUrl}/api/v1/training/plans/1/items/1`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${tokenA}`,
+      },
+      body: JSON.stringify({}),
+    });
+    expect(resEmpty.status).toBe(400);
+    const bodyEmpty = await resEmpty.json();
+    expect(bodyEmpty.error.code).toBe('VALIDATION_ERROR');
+
+    // String "true"
+    const resString = await fetch(`${baseUrl}/api/v1/training/plans/1/items/1`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${tokenA}`,
+      },
+      body: JSON.stringify({ completed: 'true' }),
+    });
+    expect(resString.status).toBe(400);
+
+    // Number 1
+    const resNumber = await fetch(`${baseUrl}/api/v1/training/plans/1/items/1`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${tokenA}`,
+      },
+      body: JSON.stringify({ completed: 1 }),
+    });
+    expect(resNumber.status).toBe(400);
+  });
 });
