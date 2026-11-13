@@ -2,6 +2,17 @@ import { prisma } from '../config/db.js';
 import { insertGameWithMoves } from '../repositories/moveBulk.repo.js';
 import { NotFoundError, ValidationError } from '../utils/errors.js';
 
+function toOptionalDate(value, field) {
+  if (value === undefined || value === null || value === '') {
+    return null;
+  }
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw new ValidationError(`${field} must be a valid date`);
+  }
+  return date;
+}
+
 /**
  * Creates or retrieves an active import job for the player account.
  * Deduplicates active jobs (queued or running). If a race occurs against
@@ -24,12 +35,11 @@ export async function createImportJob(userId, { accountId, maxGames = 50, since,
     throw new NotFoundError('Player account not found');
   }
 
-  if (since && until) {
-    const sinceDate = since instanceof Date ? since : new Date(since);
-    const untilDate = until instanceof Date ? until : new Date(until);
-    if (!Number.isNaN(sinceDate.getTime()) && !Number.isNaN(untilDate.getTime()) && sinceDate > untilDate) {
-      throw new ValidationError('since date must be less than or equal to until date');
-    }
+  const sinceDate = toOptionalDate(since, 'since');
+  const untilDate = toOptionalDate(until, 'until');
+
+  if (sinceDate && untilDate && sinceDate > untilDate) {
+    throw new ValidationError('since date must be less than or equal to until date');
   }
 
   const parsedMax = maxGames !== undefined ? parseInt(maxGames, 10) : 50;
@@ -52,8 +62,8 @@ export async function createImportJob(userId, { accountId, maxGames = 50, since,
         playerAccountId: accountId,
         status: 'queued',
         maxGames: clampedMax,
-        since: since ? new Date(since) : null,
-        until: until ? new Date(until) : null,
+        since: sinceDate,
+        until: untilDate,
       },
     });
     return job;
