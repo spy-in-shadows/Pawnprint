@@ -7,7 +7,7 @@ Team conventions for the Longitudinal Chess Analytics Engine. Every contributor 
 - Express with strict **MVC + service/repository layering**: routes -> controllers -> services -> repositories. Controllers never touch the DB directly.
 - Prisma for schema, migrations, reads and low-volume writes. Raw `pg` Pool only for hot paths (bulk move inserts, job claiming). Do not use Prisma per-row creates for moves.
 - PostgreSQL runs via `docker-compose.yml`. Config comes from `.env` (never commit it); keep `.env.example` current.
-- Stockfish path comes from `STOCKFISH_PATH` (or auto-detected system binary).
+- Stockfish path comes from `STOCKFISH_PATH` (default `/opt/homebrew/bin/stockfish`; there is no auto-detection).
 - React frontend lives in `client/` (Vite). It talks to `/api/v1/*` only.
 
 ## Key Architectural & Implementation Decisions
