@@ -159,12 +159,16 @@ export async function getTrend({ userId, accountId, from, to }) {
   const sql = `
     WITH daily_stats AS (
       SELECT
-        TO_CHAR(DATE_TRUNC('day', g.played_at), 'YYYY-MM-DD') AS day,
+        DATE_TRUNC('day', g.played_at)::date AS day,
         COUNT(DISTINCT g.id)::int AS games,
         ROUND(
           (COUNT(CASE WHEN c.name IN ('best', 'good') THEN 1 END)::numeric / NULLIF(COUNT(m.id), 0)::numeric) * 100,
           1
-        )::float AS "accuracyPct"
+        )::float AS "accuracyPct",
+        ROUND(
+          AVG(mc.cp_loss)::numeric,
+          1
+        )::float AS "avgCpLoss"
       FROM moves m
       JOIN games g ON m.game_id = g.id
       JOIN player_accounts pa ON g.player_account_id = pa.id
@@ -176,16 +180,17 @@ export async function getTrend({ userId, accountId, from, to }) {
         AND ($4::timestamp IS NULL OR g.played_at <= $4)
         AND g.analysis_status = 'analyzed'
         AND m.mover_color = g.color
-      GROUP BY DATE_TRUNC('day', g.played_at)
+      GROUP BY DATE_TRUNC('day', g.played_at)::date
     )
     SELECT
-      day,
+      TO_CHAR(day, 'YYYY-MM-DD') AS day,
       games,
       "accuracyPct",
+      "avgCpLoss",
       ROUND(
         AVG("accuracyPct") OVER (
           ORDER BY day
-          ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
+          RANGE BETWEEN INTERVAL '6 days' PRECEDING AND CURRENT ROW
         )::numeric,
         1
       )::float AS "rollingAccuracyPct"
@@ -221,22 +226,19 @@ export async function getMotifs({ userId, accountId, from, to }) {
         (COUNT(mm.move_id)::numeric / NULLIF(om.total_moves, 0)::numeric) * 100,
         2
       )::float AS "errorsPer100Moves"
-    FROM motifs mot
-    CROSS JOIN (VALUES ('allowed'::text), ('missed'::text)) AS k(kind)
+    FROM player_accounts pa
+    JOIN games g ON g.player_account_id = pa.id
+    JOIN moves m ON m.game_id = g.id
+    JOIN move_motifs mm ON mm.move_id = m.id
+    JOIN motifs mot ON mm.motif_id = mot.id
     CROSS JOIN owner_moves om
-    LEFT JOIN move_motifs mm ON mm.motif_id = mot.id AND mm.kind = k.kind
-    LEFT JOIN moves m ON mm.move_id = m.id AND m.mover_color = (
-      SELECT g2.color FROM games g2 WHERE g2.id = m.game_id
-    )
-    LEFT JOIN games g ON m.game_id = g.id AND g.analysis_status = 'analyzed'
-    LEFT JOIN player_accounts pa ON g.player_account_id = pa.id
-      AND pa.user_id = $1
+    WHERE pa.user_id = $1
       AND ($2::int IS NULL OR pa.id = $2)
       AND ($3::timestamp IS NULL OR g.played_at >= $3)
       AND ($4::timestamp IS NULL OR g.played_at <= $4)
-    WHERE mm.move_id IS NULL OR pa.id IS NOT NULL
-    GROUP BY mot.name, mm.kind, k.kind, om.total_moves
-    HAVING COUNT(mm.move_id) > 0
+      AND g.analysis_status = 'analyzed'
+      AND m.mover_color = g.color
+    GROUP BY mot.name, mm.kind, om.total_moves
     ORDER BY "errorsPer100Moves" DESC, "errorCount" DESC, mot.name ASC, mm.kind ASC;
   `;
 
