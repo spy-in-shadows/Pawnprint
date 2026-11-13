@@ -57,10 +57,32 @@ export async function getTimePressure(userId, query = {}) {
   return analyticsRepo.getTimePressure({ userId, ...filters });
 }
 
+export async function getTrend(userId, query = {}) {
+  const filters = validateFilters(query);
+  return analyticsRepo.getTrend({ userId, ...filters });
+}
+
+export async function getMotifs(userId, query = {}) {
+  const filters = validateFilters(query);
+  return analyticsRepo.getMotifs({ userId, ...filters });
+}
+
+export async function getWeakestOpeningPhases(userId, options = {}) {
+  return analyticsRepo.getWeakestOpeningPhases({ userId, ...options });
+}
+
+export async function getWeakestMotifs(userId, options = {}) {
+  return analyticsRepo.getWeakestMotifs({ userId, ...options });
+}
+
 export const analyticsService = {
   getOpenings,
   getPhases,
   getTimePressure,
+  getTrend,
+  getMotifs,
+  getWeakestOpeningPhases,
+  getWeakestMotifs,
 };
 
 export default analyticsService;

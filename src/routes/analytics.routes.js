@@ -9,5 +9,7 @@ router.use(authenticate);
 router.get('/openings', analyticsController.openings);
 router.get('/phases', analyticsController.phases);
 router.get('/time-pressure', analyticsController.timePressure);
+router.get('/trend', analyticsController.trend);
+router.get('/motifs', analyticsController.motifs);
 
 export default router;

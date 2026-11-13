@@ -151,7 +151,7 @@ Exposed as REST endpoints, implemented with Prisma and raw SQL:
 2. **Phase accuracy:** average accuracy and cp_loss by phase.
 3. **Time decay:** blunder rate by clock-remaining bucket (>50%, 25-50%, 10-25%, <10%).
 4. **Trend over time:** rolling 7-day average of accuracy and daily cp_loss (window function).
-5. **Motif weakness:** tactical motif errors, reporting `errors_per_100_moves` as a player move-frequency metric (errors per 100 player moves played).
+5. **Motif weakness:** tactical motif errors, reporting `errorsPer100Moves` as a move-frequency rate (errors per 100 of the owner's moves played across the user's analyzed games), not an opportunity-normalized rate.
 6. **Point-in-time:** every query accepts `from` and `to` date filters.
 
 ## 9. Tactical motif tagging
