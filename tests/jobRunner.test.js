@@ -548,6 +548,25 @@ describe('JobRunner error partitioning', () => {
     expect((await storedJob(second.id)).skippedGames).toBe(1);
   });
 
+  it('completes the job and logs a warning when the data-quality checks find a violation', async () => {
+    const account = await createAccount();
+    const [gameId] = await storeGames(account, [9]);
+    await prisma.game.update({ where: { id: gameId }, data: { analysisStatus: 'failed', failureReason: null } });
+    mockFetch([]);
+    const runner = runnerWith(fakeEngine());
+    const warn = vi.spyOn(runner.log, 'warn');
+    const job = await claimJobFor(account.id);
+
+    await runner.processJob(job);
+
+    expect((await storedJob(job.id)).status).toBe('completed');
+    expect(warn).toHaveBeenCalledWith('Data-quality checks found violations', {
+      jobId: job.id,
+      accountId: account.id,
+      violations: [{ check: 'failed_games_have_reason', count: 1, sample: [gameId] }],
+    });
+  });
+
   it('fails the job when the platform client fails', async () => {
     const account = await createAccount();
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('', { status: 500 }));

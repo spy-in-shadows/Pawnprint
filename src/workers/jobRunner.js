@@ -7,6 +7,7 @@ import { markGameFailed, saveGameAnalysis } from '../repositories/moveBulk.repo.
 import { logger } from '../utils/logger.js';
 import { analyzeGame } from './gameAnalyzer.js';
 import { registerEngineVersion } from './engineRegistry.js';
+import { runDataQualityChecks } from './dataQuality.js';
 import {
   claimNextJob,
   heartbeat,
@@ -211,6 +212,7 @@ export class JobRunner {
 
       await markJobFinished(jobId, { failedGames, skippedGames: ingested.skippedGames });
       await this._advanceCursor(jobId, accountId, ingested.newestPlayedAt);
+      await this._checkDataQuality(jobId, accountId);
 
       workerEvents.emit('job:finished', {
         jobId,
@@ -270,6 +272,16 @@ export class JobRunner {
       await advanceCursor(accountId, newestPlayedAt);
     } catch (err) {
       this.log.error('Job finished but the sync cursor was not advanced', { jobId, err });
+    }
+  }
+
+  // Reporting only: the job is already completed and a violation or a failing check never changes that.
+  async _checkDataQuality(jobId, accountId) {
+    try {
+      const { ok, violations } = await runDataQualityChecks({ accountId });
+      if (!ok) this.log.warn('Data-quality checks found violations', { jobId, accountId, violations });
+    } catch (err) {
+      this.log.warn('Data-quality checks could not run', { jobId, accountId, err });
     }
   }
 
