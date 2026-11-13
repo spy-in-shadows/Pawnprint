@@ -841,6 +841,64 @@ describe('chesscomClient', () => {
     expect(stats.skippedGames).toBe(0);
   });
 
+  it('fails the Chess.com import on archive errors other than 404', async () => {
+    globalThis.fetch = vi.fn(async (url) => {
+      if (url.includes('/games/archives')) {
+        return {
+          status: 200,
+          ok: true,
+          headers: { 'content-type': 'application/json' },
+          json: async () => ({
+            archives: ['https://api.chess.com/pub/player/erik/games/2023/05'],
+          }),
+        };
+      }
+      return {
+        status: 500,
+        ok: false,
+      };
+    });
+
+    const run500 = async () => {
+      for await (const g of fetchChesscomGames('erik', { delayMs: 0 })) {}
+    };
+    await expect(run500()).rejects.toThrow(
+      'Chess.com archive https://api.chess.com/pub/player/erik/games/2023/05/pgn returned status 500'
+    );
+
+    globalThis.fetch = vi.fn(async (url) => {
+      if (url.includes('/games/archives')) {
+        return {
+          status: 200,
+          ok: true,
+          headers: { 'content-type': 'application/json' },
+          json: async () => ({
+            archives: [
+              'https://api.chess.com/pub/player/erik/games/2023/04',
+              'https://api.chess.com/pub/player/erik/games/2023/05',
+            ],
+          }),
+        };
+      }
+      if (url.includes('/2023/05/pgn')) {
+        return { status: 404, ok: false };
+      }
+      return {
+        status: 200,
+        ok: true,
+        headers: { 'content-type': 'application/x-chess-pgn' },
+        text: async () => sampleStandardPgn,
+      };
+    });
+
+    const games = [];
+    for await (const g of fetchChesscomGames('erik', { delayMs: 0 })) {
+      games.push(g);
+    }
+    expect(games).toHaveLength(1);
+    expect(games[0].white).toBe('Player1');
+  });
+
   it('exports chesscomClient object with fetchUserGames and isStandardChess', () => {
     expect(typeof chesscomClient.fetchUserGames).toBe('function');
     expect(typeof chesscomClient.isStandardChess).toBe('function');
