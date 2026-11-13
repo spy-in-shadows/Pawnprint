@@ -3,7 +3,7 @@ import { StockfishClient } from '../chess/stockfishClient.js';
 import { lichessClient } from '../ingest/lichessClient.js';
 import { chesscomClient } from '../ingest/chesscomClient.js';
 import { importService } from '../services/import.service.js';
-import { saveGameAnalysis } from '../repositories/moveBulk.repo.js';
+import { markGameFailed, saveGameAnalysis } from '../repositories/moveBulk.repo.js';
 import { logger } from '../utils/logger.js';
 import { analyzeGame } from './gameAnalyzer.js';
 import { registerEngineVersion } from './engineRegistry.js';
@@ -17,6 +17,8 @@ import {
 import workerEvents from './events.js';
 
 export const HEARTBEAT_INTERVAL_MS = 25000;
+const MAX_ENGINE_ATTEMPTS = 3;
+const ENGINE_RETRY_DELAY_MS = 1000;
 const IDLE_SLEEP_MS = 1000;
 const INGEST_BATCH_SIZE = 25;
 
@@ -24,6 +26,14 @@ const PLATFORM_CLIENTS = {
   lichess: lichessClient,
   chesscom: chesscomClient,
 };
+
+// Errors without a flag come from code we do not control. Only Stockfish failures are worth a
+// retry; anything else would fail the same way again, so the game is failed instead.
+function classifyError(err) {
+  if (err?.isDataError) return 'data';
+  if (err?.isEngineError) return 'engine';
+  return /Stockfish/.test(err?.message ?? '') ? 'engine' : 'data';
+}
 
 async function loadAccount(accountId) {
   const account = await prisma.playerAccount.findUnique({
@@ -60,6 +70,7 @@ export class JobRunner {
     this.workerId = workerId;
     this.engine = new StockfishClient();
     this.startCache = new Map();
+    this.engineRetryDelayMs = ENGINE_RETRY_DELAY_MS;
     this.log = logger.child({ workerId });
     this.running = false;
     this.stopping = false;
@@ -184,23 +195,29 @@ export class JobRunner {
         await updateGameProgress(jobId, gameId, 'pending');
       }
 
+      let failedGames = 0;
       for (const gameId of gameIds) {
         await updateGameProgress(jobId, gameId, 'analyzing');
-        const moves = await loadMoves(gameId);
-        const rows = await analyzeGame({ moves }, this.engine, { engineVersionId, startCache: this.startCache });
-        await saveGameAnalysis({ gameId, engineVersionId, moves: rows });
+        const failure = await this._analyzeGame(jobId, gameId, engineVersionId);
+        if (failure) {
+          failedGames += 1;
+          await markGameFailed(gameId, failure);
+          await updateGameProgress(jobId, gameId, 'failed', failure);
+          continue;
+        }
         await updateGameProgress(jobId, gameId, 'done');
         workerEvents.emit('game:done', { jobId, gameId });
       }
 
-      await markJobFinished(jobId, { failedGames: 0, skippedGames: ingested.skippedGames });
+      await markJobFinished(jobId, { failedGames, skippedGames: ingested.skippedGames });
       await this._advanceCursor(jobId, accountId, ingested.newestPlayedAt);
 
       workerEvents.emit('job:finished', {
         jobId,
         accountId,
         insertedGames: ingested.insertedCount,
-        analyzedGames: gameIds.length,
+        analyzedGames: gameIds.length - failedGames,
+        failedGames,
         skippedGames: ingested.skippedGames,
       });
     } catch (err) {
@@ -213,6 +230,36 @@ export class JobRunner {
     } finally {
       this._clearHeartbeat();
     }
+  }
+
+  // Returns null when the game was analyzed and saved, or the failure reason for a data error.
+  // Engine errors are retried on a restarted engine; once the attempts run out they propagate
+  // and fail the job. Evals stay in memory until saveGameAnalysis, so a failed game writes nothing.
+  async _analyzeGame(jobId, gameId, engineVersionId) {
+    const moves = await loadMoves(gameId);
+    let rows;
+    for (let attempt = 1; !rows; attempt += 1) {
+      try {
+        if (attempt > 1) await this._restartEngine();
+        rows = await analyzeGame({ moves }, this.engine, { engineVersionId, startCache: this.startCache });
+      } catch (err) {
+        if (this.stopping) throw err;
+        const kind = classifyError(err);
+        const flagged = Boolean(err?.isDataError || err?.isEngineError);
+        this.log.warn('Game analysis failed', { jobId, gameId, attempt, kind, flagged, err });
+        if (kind === 'data') return err?.message || 'Game data could not be analyzed';
+        if (attempt >= MAX_ENGINE_ATTEMPTS || this.engine.hasCrashedTooManyTimes) throw err;
+      }
+    }
+    await saveGameAnalysis({ gameId, engineVersionId, moves: rows });
+    return null;
+  }
+
+  async _restartEngine() {
+    if (this.engineRetryDelayMs > 0) await this._sleep(this.engineRetryDelayMs);
+    if (this.stopping) throw new Error('Worker is stopping');
+    await this.engine.init();
+    await this.engine.newGame();
   }
 
   // Runs only after markJobFinished succeeded. A failure here must not turn the completed job

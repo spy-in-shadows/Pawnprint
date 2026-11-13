@@ -5,14 +5,16 @@ import { prisma, pgPool, closeDb } from '../src/config/db.js';
 import config from '../src/config/env.js';
 import { seed } from '../prisma/seed/index.js';
 import { lichessClient } from '../src/ingest/lichessClient.js';
+import { importService } from '../src/services/import.service.js';
 import { claimNextJob } from '../src/workers/jobQueue.js';
 import { registerEngineVersion } from '../src/workers/engineRegistry.js';
 import { JobRunner } from '../src/workers/jobRunner.js';
 import workerEvents from '../src/workers/events.js';
-import { EngineError } from '../src/utils/errors.js';
+import { DataError, EngineError } from '../src/utils/errors.js';
 
 const hasBinary = fs.existsSync(config.stockfishPath);
 const runTag = `jr_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
+const FAKE_ENGINE_NAME = `${runTag}-fake`;
 const OPENINGS = [
   ['e4', 'e5', 'Nf3', 'Nc6'],
   ['d4', 'd5', 'c4', 'e6'],
@@ -105,6 +107,7 @@ afterEach(() => {
 
 afterAll(async () => {
   await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+  await prisma.engineVersion.deleteMany({ where: { name: FAKE_ENGINE_NAME } });
   await closeDb();
 });
 
@@ -150,6 +153,7 @@ describe.skipIf(!hasBinary)('JobRunner with the engine', () => {
 
   beforeAll(async () => {
     runner = new JobRunner(`${runTag}-runner`);
+    runner.engineRetryDelayMs = 0;
     await runner.engine.init();
   });
 
@@ -238,7 +242,8 @@ describe.skipIf(!hasBinary)('JobRunner with the engine', () => {
     const account = await createAccount();
     const games = [1, 2, 3, 4, 5].map((day, i) => parsedGame(account.username, i, new Date(`2026-04-0${day}T12:00:00Z`)));
     mockFetch(games);
-    const evaluate = vi.spyOn(runner.engine, 'evaluatePosition').mockRejectedValueOnce(new EngineError('crash'));
+    // Every attempt fails; a single failure would now be absorbed by the engine retry.
+    const evaluate = vi.spyOn(runner.engine, 'evaluatePosition').mockRejectedValue(new EngineError('crash'));
     const first = await claimJobFor(account.id);
     await runner.processJob(first);
 
@@ -292,5 +297,266 @@ describe.skipIf(!hasBinary)('JobRunner with the engine', () => {
     const stored = await prisma.analysisJob.findUnique({ where: { id: job.id } });
     expect(stored.status).toBe('completed');
     expect(stored.heartbeatAt).not.toBeNull();
+  });
+});
+
+const FAKE_EVAL = { evalCp: 20, mate: null, bestUci: 'e2e4', depth: 12 };
+
+function fakeEngine(evaluate = async () => FAKE_EVAL) {
+  return {
+    engineName: FAKE_ENGINE_NAME,
+    engineVersion: '1.0',
+    depth: 12,
+    threads: 1,
+    hashSize: 64,
+    hasCrashedTooManyTimes: false,
+    init: vi.fn(async () => {}),
+    newGame: vi.fn(async () => {}),
+    quit: vi.fn(async () => {}),
+    evaluatePosition: vi.fn(evaluate),
+  };
+}
+
+// A fresh runner per test keeps the start-position cache from hiding engine calls.
+function runnerWith(engine) {
+  const runner = new JobRunner(`${runTag}-partition`);
+  runner.engine = engine;
+  runner.engineRetryDelayMs = 0;
+  return runner;
+}
+
+// Stores the games up front so a test can corrupt them before the job runs; the job's own fetch returns nothing new.
+async function storeGames(account, days) {
+  const games = days.map((day, i) => parsedGame(account.username, i, new Date(`2026-07-${String(day).padStart(2, '0')}T09:00:00Z`)));
+  await importService.ingestParsedGames(account.id, games);
+  const stored = await prisma.game.findMany({ where: { playerAccountId: account.id }, orderBy: { playedAt: 'desc' } });
+  return stored.map((g) => g.id);
+}
+
+async function makeIllegal(gameId, ply) {
+  await prisma.move.updateMany({ where: { gameId, ply }, data: { san: 'Ke8', uci: 'e1e8' } });
+}
+
+async function evalRowCount(gameId) {
+  const { rows } = await pgPool.query(
+    'SELECT COUNT(*)::int AS n FROM move_evals me JOIN moves m ON m.id = me.move_id WHERE m.game_id = $1',
+    [gameId],
+  );
+  return rows[0].n;
+}
+
+async function storedJob(jobId) {
+  return prisma.analysisJob.findUnique({ where: { id: jobId }, include: { jobGames: true } });
+}
+
+function pgnGame(id, { variant } = {}) {
+  const tags = [
+    `[Event "Rated blitz game"]`,
+    `[Site "https://lichess.org/${id}"]`,
+    `[White "${runTag}"]`,
+    `[Black "opponent"]`,
+    `[Result "1/2-1/2"]`,
+    `[UTCDate "2026.08.01"]`,
+    `[UTCTime "10:00:00"]`,
+    `[TimeControl "300+0"]`,
+  ];
+  if (variant) tags.push(`[Variant "${variant}"]`);
+  return `${tags.join('\n')}\n\n1. e4 e5 2. Nf3 Nc6 1/2-1/2\n\n`;
+}
+
+describe('JobRunner error partitioning', () => {
+  it('fails only the game with an illegal move and completes the job with failedGames 1', async () => {
+    const account = await createAccount();
+    const [newest, middle, oldest] = await storeGames(account, [1, 2, 3]);
+    await makeIllegal(middle, 3);
+    mockFetch([]);
+    const engine = fakeEngine();
+    const job = await claimJobFor(account.id);
+
+    await runnerWith(engine).processJob(job);
+
+    const stored = await storedJob(job.id);
+    expect(stored.status).toBe('completed');
+    expect(stored.failedGames).toBe(1);
+    const byGame = new Map(stored.jobGames.map((g) => [g.gameId, g]));
+    expect(byGame.get(newest).status).toBe('done');
+    expect(byGame.get(oldest).status).toBe('done');
+    expect(byGame.get(middle).status).toBe('failed');
+    expect(byGame.get(middle).error).toMatch(/Illegal or unparseable move 'Ke8'/);
+    const failedGame = await prisma.game.findUnique({ where: { id: middle } });
+    expect(failedGame.analysisStatus).toBe('failed');
+    expect(failedGame.failureReason).toBe(byGame.get(middle).error);
+    // A data error never restarts the engine, so the game was attempted exactly once.
+    expect(engine.init).not.toHaveBeenCalled();
+    expect(engine.newGame).not.toHaveBeenCalled();
+  });
+
+  it('does not re-select a failed game or let it take a maxGames slot in the next job', async () => {
+    const account = await createAccount();
+    const [newest, second] = await storeGames(account, [5, 4, 3]);
+    await makeIllegal(newest, 2);
+    mockFetch([]);
+    const runner = runnerWith(fakeEngine());
+
+    const first = await claimJobFor(account.id, { maxGames: 1 });
+    await runner.processJob(first);
+    expect((await storedJob(first.id)).failedGames).toBe(1);
+
+    const next = await claimJobFor(account.id, { maxGames: 1 });
+    await runner.processJob(next);
+
+    const stored = await storedJob(next.id);
+    expect(stored.status).toBe('completed');
+    expect(stored.failedGames).toBe(0);
+    expect(stored.jobGames.map((g) => [g.gameId, g.status])).toEqual([[second, 'done']]);
+    expect(await importService.getPendingGameIds(account.id, 10)).not.toContain(newest);
+  });
+
+  it('writes no move_evals rows for a game that hits a data error halfway through', async () => {
+    const account = await createAccount();
+    const [newest, older] = await storeGames(account, [2, 1]);
+    mockFetch([]);
+    let calls = 0;
+    // Calls 1-3 cover the start position and plies 1-2 of the newest game; call 4 fails on ply 3.
+    const engine = fakeEngine(async () => {
+      calls += 1;
+      if (calls === 4) throw new DataError('Corrupt position at ply 3');
+      return FAKE_EVAL;
+    });
+    const job = await claimJobFor(account.id);
+
+    await runnerWith(engine).processJob(job);
+
+    expect(calls).toBeGreaterThan(4);
+    expect((await prisma.game.findUnique({ where: { id: newest } })).analysisStatus).toBe('failed');
+    expect(await evalRowCount(newest)).toBe(0);
+    expect(await evalRowCount(older)).toBe(4);
+    expect((await storedJob(job.id)).status).toBe('completed');
+  });
+
+  it('retries an engine error 3 times with a restart in between, then fails the job', async () => {
+    const account = await createAccount();
+    const [gameId] = await storeGames(account, [1]);
+    mockFetch([]);
+    const engine = fakeEngine(async () => {
+      throw new EngineError('Stockfish search timed out after 10000 ms');
+    });
+    const job = await claimJobFor(account.id);
+
+    await runnerWith(engine).processJob(job);
+
+    expect(engine.evaluatePosition).toHaveBeenCalledTimes(3);
+    expect(engine.init).toHaveBeenCalledTimes(2);
+    expect(engine.newGame).toHaveBeenCalledTimes(2);
+    const stored = await storedJob(job.id);
+    expect(stored.status).toBe('failed');
+    expect(stored.error).toBe('Stockfish search timed out after 10000 ms');
+    const game = await prisma.game.findUnique({ where: { id: gameId } });
+    expect(game.analysisStatus).toBe('pending');
+    expect(await evalRowCount(gameId)).toBe(0);
+  });
+
+  it('stops retrying once the engine has crashed too many times', async () => {
+    const account = await createAccount();
+    await storeGames(account, [1]);
+    mockFetch([]);
+    const engine = fakeEngine(async () => {
+      throw new EngineError('Stockfish exited unexpectedly');
+    });
+    engine.hasCrashedTooManyTimes = true;
+    const job = await claimJobFor(account.id);
+
+    await runnerWith(engine).processJob(job);
+
+    expect(engine.evaluatePosition).toHaveBeenCalledTimes(1);
+    expect(engine.init).not.toHaveBeenCalled();
+    expect((await storedJob(job.id)).status).toBe('failed');
+  });
+
+  it('completes the game when the engine fails on the first attempt and succeeds on the second', async () => {
+    const account = await createAccount();
+    const [gameId] = await storeGames(account, [1]);
+    mockFetch([]);
+    const engine = fakeEngine();
+    engine.evaluatePosition.mockRejectedValueOnce(new EngineError('Stockfish exited unexpectedly'));
+    const job = await claimJobFor(account.id);
+
+    await runnerWith(engine).processJob(job);
+
+    expect(engine.init).toHaveBeenCalledTimes(1);
+    expect(engine.newGame).toHaveBeenCalledTimes(1);
+    const stored = await storedJob(job.id);
+    expect(stored.status).toBe('completed');
+    expect(stored.failedGames).toBe(0);
+    expect(stored.jobGames).toEqual([expect.objectContaining({ gameId, status: 'done' })]);
+    expect((await prisma.game.findUnique({ where: { id: gameId } })).analysisStatus).toBe('analyzed');
+    expect(await evalRowCount(gameId)).toBe(4);
+  });
+
+  it('treats unflagged errors as engine errors only when they mention Stockfish', async () => {
+    const account = await createAccount();
+    const [newest, older] = await storeGames(account, [2, 1]);
+    mockFetch([]);
+    let calls = 0;
+    const engine = fakeEngine(async () => {
+      calls += 1;
+      if (calls === 1) throw new Error('write EPIPE to Stockfish stdin');
+      if (calls === 2) throw new TypeError('position is undefined');
+      return FAKE_EVAL;
+    });
+    const job = await claimJobFor(account.id);
+
+    await runnerWith(engine).processJob(job);
+
+    const stored = await storedJob(job.id);
+    expect(stored.status).toBe('completed');
+    expect(engine.init).toHaveBeenCalledTimes(1);
+    const byGame = new Map(stored.jobGames.map((g) => [g.gameId, g]));
+    expect(byGame.get(newest)).toMatchObject({ status: 'failed', error: 'position is undefined' });
+    expect(byGame.get(older).status).toBe('done');
+    expect((await prisma.game.findUnique({ where: { id: newest } })).failureReason).toBe('position is undefined');
+  });
+
+  it('saves skippedGames from the client stats on the job', async () => {
+    const account = await createAccount();
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(pgnGame(`${runTag}s1`) + pgnGame(`${runTag}v1`, { variant: 'Atomic' }) + pgnGame(`${runTag}v2`, { variant: 'Crazyhouse' })),
+    );
+    const job = await claimJobFor(account.id);
+
+    await runnerWith(fakeEngine()).processJob(job);
+
+    const stored = await storedJob(job.id);
+    expect(stored.status).toBe('completed');
+    expect(stored.skippedGames).toBe(2);
+    expect(stored.jobGames).toHaveLength(1);
+  });
+
+  it('reports separate skipped counts for two consecutive jobs on the shared client', async () => {
+    const account = await createAccount();
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(pgnGame(`${runTag}a1`, { variant: 'Atomic' }) + pgnGame(`${runTag}a2`, { variant: 'Horde' })))
+      .mockResolvedValueOnce(new Response(pgnGame(`${runTag}b1`, { variant: 'Antichess' })));
+    const runner = runnerWith(fakeEngine());
+
+    const first = await claimJobFor(account.id);
+    await runner.processJob(first);
+    const second = await claimJobFor(account.id);
+    await runner.processJob(second);
+
+    expect((await storedJob(first.id)).skippedGames).toBe(2);
+    expect((await storedJob(second.id)).skippedGames).toBe(1);
+  });
+
+  it('fails the job when the platform client fails', async () => {
+    const account = await createAccount();
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('', { status: 500 }));
+    const job = await claimJobFor(account.id);
+
+    await runnerWith(fakeEngine()).processJob(job);
+
+    const stored = await storedJob(job.id);
+    expect(stored.status).toBe('failed');
+    expect(stored.error).toBe('Lichess API returned status 500');
   });
 });
