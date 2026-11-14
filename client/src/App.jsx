@@ -6,11 +6,9 @@ import { LoginView } from './pages/LoginView';
 import { RegisterView } from './pages/RegisterView';
 import { ImportView } from './pages/ImportView';
 import { DashboardView } from './pages/DashboardView';
-import {
-  GamesPage,
-  GameDetailPage,
-  TrainingPage,
-} from './pages/Placeholders';
+import { GamesView } from './pages/GamesView';
+import { GameView } from './pages/GameView';
+import { TrainingPage } from './pages/Placeholders';
 
 export function App() {
   return (
@@ -39,7 +37,7 @@ export function App() {
           path="games"
           element={
             <ProtectedRoute>
-              <GamesPage />
+              <GamesView />
             </ProtectedRoute>
           }
         />
@@ -47,7 +45,7 @@ export function App() {
           path="games/:id"
           element={
             <ProtectedRoute>
-              <GameDetailPage />
+              <GameView />
             </ProtectedRoute>
           }
         />
