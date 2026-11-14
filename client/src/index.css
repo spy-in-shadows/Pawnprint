@@ -2,3 +2,30 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --chart-primary: #3b82f6;
+  --chart-secondary: #8b5cf6;
+  --chart-success: #10b981;
+  --chart-warning: #f59e0b;
+  --chart-danger: #ef4444;
+  --chart-accent: #06b6d4;
+  --chart-muted: #6b7280;
+  --chart-grid: #e5e7eb;
+  --chart-text: #374151;
+  --chart-allowed: #ef4444;
+  --chart-missed: #f59e0b;
+}
+
+.dark {
+  --chart-primary: #60a5fa;
+  --chart-secondary: #a78bfa;
+  --chart-success: #34d399;
+  --chart-warning: #fbbf24;
+  --chart-danger: #f87171;
+  --chart-accent: #22d3ee;
+  --chart-muted: #9ca3af;
+  --chart-grid: #374151;
+  --chart-text: #d1d5db;
+  --chart-allowed: #f87171;
+  --chart-missed: #fbbf24;
+}

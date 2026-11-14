@@ -5,12 +5,10 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { LoginView } from './pages/LoginView';
 import { RegisterView } from './pages/RegisterView';
 import { ImportView } from './pages/ImportView';
-import {
-  DashboardPage,
-  GamesPage,
-  GameDetailPage,
-  TrainingPage,
-} from './pages/Placeholders';
+import { DashboardView } from './pages/DashboardView';
+import { GamesView } from './pages/GamesView';
+import { GameView } from './pages/GameView';
+import { TrainingPlanView } from './pages/TrainingPlanView';
 
 export function App() {
   return (
@@ -23,7 +21,7 @@ export function App() {
           path="dashboard"
           element={
             <ProtectedRoute>
-              <DashboardPage />
+              <DashboardView />
             </ProtectedRoute>
           }
         />
@@ -39,7 +37,7 @@ export function App() {
           path="games"
           element={
             <ProtectedRoute>
-              <GamesPage />
+              <GamesView />
             </ProtectedRoute>
           }
         />
@@ -47,7 +45,7 @@ export function App() {
           path="games/:id"
           element={
             <ProtectedRoute>
-              <GameDetailPage />
+              <GameView />
             </ProtectedRoute>
           }
         />
@@ -55,7 +53,7 @@ export function App() {
           path="training"
           element={
             <ProtectedRoute>
-              <TrainingPage />
+              <TrainingPlanView />
             </ProtectedRoute>
           }
         />
