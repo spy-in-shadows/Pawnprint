@@ -39,6 +39,8 @@ model PlayerAccount {
   platform     Platform      @relation(fields: [platformId], references: [id])
   games        Game[]
   analysisJobs AnalysisJob[]
+  summary      AccountSummary?
+  phaseSummaries AccountPhaseSummary[]
 
   // Justified by explain plans on player_accounts filtering by user_id
   @@index([userId], map: "idx_player_accounts_user_id")
@@ -108,6 +110,7 @@ model Phase {
   id    Int    @id @default(autoincrement())
   name  String @unique
   moves Move[]
+  phaseSummaries AccountPhaseSummary[]
 
   @@map("phases")
 }
@@ -305,4 +308,37 @@ model AnalysisJobGame {
   @@id([jobId, gameId])
   @@map("analysis_job_games")
 }
+
+model AccountSummary {
+  playerAccountId Int           @id @map("player_account_id")
+  totalGames      Int           @map("total_games")
+  analyzedGames   Int           @map("analyzed_games")
+  totalMoves      Int           @map("total_moves")
+  inaccuracies    Int
+  mistakes        Int
+  blunders        Int
+  avgCpLoss       Float         @map("avg_cp_loss")
+  accuracyPct     Float         @map("accuracy_pct")
+  lastGameAt      DateTime?     @map("last_game_at")
+  refreshedAt     DateTime      @default(now()) @map("refreshed_at")
+
+  playerAccount   PlayerAccount @relation(fields: [playerAccountId], references: [id], onDelete: Cascade)
+
+  @@map("account_summary")
+}
+
+model AccountPhaseSummary {
+  playerAccountId Int           @map("player_account_id")
+  phaseId         Int           @map("phase_id")
+  moves           Int
+  blunders        Int
+  avgCpLoss       Float         @map("avg_cp_loss")
+
+  playerAccount   PlayerAccount @relation(fields: [playerAccountId], references: [id], onDelete: Cascade)
+  phase           Phase         @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+
+  @@id([playerAccountId, phaseId])
+  @@map("account_phase_summary")
+}
+
 
