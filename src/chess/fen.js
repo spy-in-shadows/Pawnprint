@@ -50,5 +50,5 @@ export function validateFen(fen) {
   } catch (err) {
     return { ok: false, error: err.message };
   }
-  return { ok: true };
+  return { ok: true, error: null };
 }

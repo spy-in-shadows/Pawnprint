@@ -11,15 +11,15 @@ function expectRejected(fen, pattern) {
 
 describe('validateFen', () => {
   it('accepts the standard start position', () => {
-    expect(validateFen(START)).toEqual({ ok: true });
+    expect(validateFen(START)).toEqual({ ok: true, error: null });
   });
 
   it('accepts a FEN with surrounding whitespace', () => {
-    expect(validateFen(`  ${START}\n`)).toEqual({ ok: true });
+    expect(validateFen(`  ${START}\n`)).toEqual({ ok: true, error: null });
   });
 
   it('accepts a legal middlegame position with Black to move', () => {
-    expect(validateFen('r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 2 3')).toEqual({ ok: true });
+    expect(validateFen('r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 2 3')).toEqual({ ok: true, error: null });
   });
 
   it('rejects non-strings', () => {
