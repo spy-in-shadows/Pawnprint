@@ -43,7 +43,9 @@ DESIGN.md is the full design; ENGINEERING.md lists the decisions and rules.
 | 4. Quality and performance | #15 | PR-B5: Data-quality checks and tactical motif detection | 2026-11-14 |
 | | #16 | PR-A5: Insert benchmark and puzzle importer | 2026-11-14 |
 | | #17 | PR-C4: Query evidence, indexes, summary tables and query benchmark | 2026-11-14 |
-| 5. Verification | PR-B6 | Crash-recovery tests, throughput benchmark and end-to-end test | open |
+| 5. Verification | #18 | PR-B6: Crash-recovery tests, throughput benchmark and end-to-end test | 2026-11-14 |
+| | #19 | PR-C7: Dashboard, game viewer and training page | 2026-11-14 |
+| | #20 | PR-B7: Final audit Person B | 2026-11-15 |
 
 ## 3. Schema and insert benchmark
 
@@ -142,10 +144,86 @@ Benchmark measured across 20 iterations (3 warm-up runs) against a 10,000-game d
 - `refreshAccountSummary` is a synchronous step at job completion that adds ~267 ms per job and moves aggregation cost off dashboard reads.
 
 ## 6. Demo and results
-TODO(C)
+
+### What the Demo Shows
+The live system demonstration (`docs/DEMO.md`) provides an 8-minute end-to-end walkthrough of the complete pipeline across browser and terminal workflows:
+1. **User Onboarding and Ingestion**:
+   - Registering a user account and linking a Lichess platform account (`POST /api/v1/accounts`).
+   - Triggering game synchronization with optional date range bounds (`POST /api/v1/imports`) or uploading PGN files.
+   - Real-time job polling tracking worker status (`queued` -> `running` -> `finished`).
+2. **Analysis Worker Execution**:
+   - Multi-worker concurrent processing with atomic `SKIP LOCKED` job claiming.
+   - Persistent Stockfish process (depth 12, 1 thread, 64 MB hash) evaluating games via N+1 searches with cached starting position evals.
+   - Detection of tactical motifs (`allowed` opponent tactics vs `missed` player opportunities).
+   - Atomic completion with single-transaction persistence and automatic `account_summary` refresh.
+3. **Analytics Dashboard Walkthrough**:
+   - High-level KPIs from summary rollup tables (analyzed games, win-probability accuracy %, blunders per 100 moves, average centipawn loss).
+   - Visualizing opening blunder rates with ECO and ply bucket breakdowns.
+   - Phase accuracy comparison across opening, middlegame, and endgame.
+   - Clock time-pressure decay across ordered remaining time buckets (`>50%`, `25-50%`, `10-25%`, `<10%`).
+   - Longitudinal 7-day rolling performance trends against raw daily accuracies.
+   - Dual-series tactical motif weakness analysis (allowed vs missed rates).
+4. **Interactive Game Viewer**:
+   - Paginated games list with result badges, ratings, ECO openings, and failure reason tooltips.
+   - Interactive board oriented to the player's color with keyboard navigation (`Left`, `Right`, `Home`, `End`).
+   - Win-probability evaluation graph with click-to-move navigation.
+   - Move details panel featuring move classifications, centipawn loss, engine best move in algebraic notation (SAN), clock stats, and motif badges.
+5. **Personalized Tactical Training**:
+   - Synthesizing a tailored training plan (`POST /api/v1/training/plans`) based on weakest motifs and opening phases.
+   - Interactive puzzle board displaying Lichess puzzles with pre-applied setup moves and proper board orientation.
+   - Drag-and-drop solving with 350ms opponent auto-reply, wrong-move snap-back, hint square highlight, and asynchronous completion tracking.
+6. **Integrity and Resiliency Verification**:
+   - Running data quality checks (`npm run dq`) validating all database integrity invariants.
+   - Demonstrating worker process crash recovery and poison job quarantine.
+
+### UI Screens in the Application
+- **`/login` and `/register`**: JWT-based authentication views with form validation and error handling.
+- **`/dashboard`**: Longitudinal analytics dashboard featuring 4 summary tiles and 5 Recharts data visualizations with accessible data table fallbacks.
+- **`/import`**: Account linking for Lichess and Chess.com, PGN file upload dropzone, and active import job polling cards.
+- **`/games`**: Paginated games explorer (page size 20) with multi-criteria filters (account, date range, ECO) and status badges.
+- **`/games/:id`**: Interactive game replay studio with chessboard, win-probability graph, move list, and tactical details panel.
+- **`/training`**: Personalized training plan dashboard with grouped puzzle drills and interactive drag-and-drop solver.
+
+### Key Numbers Summary
+- **Move Insertion Throughput**: 13,033 moves/sec via PostgreSQL `UNNEST` (8.2x faster than per-row ORM creates).
+- **Analysis Worker Throughput**: 142.9 games/min (95.2 plies/sec) across 3 parallel workers on Apple M4.
+- **Summary Table Speedup**: 0.34 ms summary query latency vs 242.25 ms base aggregation (710x speedup).
+- **Engine Call Efficiency**: N+1 engine calls for an N-ply game (40.03 to 40.10 engine calls per 40-ply game).
+- **Automated Test Coverage**: 341 server tests (36 test suites) and 43 client unit tests (6 test suites) passing.
 
 ## 7. Development log summary
-TODO(all)
+
+### Totals by Person
+| Person | Role | Logged Time (min) | Issues Handled |
+| :--- | :--- | :---: | :---: |
+| **A** (07shlokjoshi) | Ingestion & Infra | 10 min | 1 |
+| **B** (spy-in-shadows) | Engine & Pipeline | 151 min | 16 |
+| **C** (Shailja-Vatsa) | Analytics & Client | 0 min | 0 |
+| **Total** | | **161 min** | **17 non-trivial issues** |
+
+### Totals by Cause
+| Cause Category | Time (min) | Frequency | Description |
+| :--- | :---: | :---: | :--- |
+| **Database & Environment Conflicts** | 35 min | 3 | Host port 5432 binding conflicts, volume WAL corruption, and fixture contamination in shared DB. |
+| **Timezone & Serialization Mismatches** | 20 min | 1 | Local timezone serialization in `pg` driver vs UTC wall-clock in Prisma shifting timestamps by UTC offset. |
+| **Specification & Schema Constraints** | 45 min | 4 | Inherent schema unique constraints rejecting test seeds, task text overlapping rules, and specification ambiguities. |
+| **Engine Search & Concurrency Edge Cases** | 23 min | 3 | Process crash queue rejection epochs, retried job eval differences due to hash state, and engine error test assertions. |
+| **Integration & Status Mismatches** | 25 min | 3 | Job status enum mismatch (`done` vs `completed`), `validateFen` return contract shape, and foreign fixture isolation. |
+| **Tooling & Setup** | 13 min | 3 | npm 11 allow-scripts lifecycle policies, fast-forward branch conflict, and FEN call counting in test stubs. |
+
+### Three Most Expensive Problems
+1. **Host Timezone vs UTC Serialization (B10, 20 minutes)**:
+   - *What happened*: On an IST host (+5:30), `claimNextJob` received `since` 5:30h early, and `last_synced_at` cursors and `played_at` timestamps were shifted.
+   - *Cause*: `timestamp` columns store UTC wall-clock time in Prisma, but `pg` serializes and parses JavaScript `Date` instances in the host's local timezone.
+   - *Fix*: Configured explicit UTC timestamp parsing per query on `pgPool`, and converted cursor timestamps with `AT TIME ZONE 'UTC'`.
+2. **PostgreSQL Port 5432 Collisions and Shared Fixture Contamination (B5, 15 minutes)**:
+   - *What happened*: `docker compose up -d` failed to bind port 5432 due to local host PostgreSQL daemons; once started, claim tests picked up leftover queued jobs from earlier test runs.
+   - *Cause*: Port 5432 was occupied by existing host services; concurrent test files left unfinished job fixtures in the shared database.
+   - *Fix*: Configured a dedicated throwaway test container on port 5434 and added pre-test cleanup clearing queued/running jobs before concurrency assertions.
+3. **Data Quality Test Seeding Blocked by Schema Constraints (B12, 15 minutes)**:
+   - *What happened*: Data-quality checks designed to catch orphaned jobs, duplicate active jobs, and duplicate engine versions could not be seeded because PostgreSQL schema constraints rejected invalid rows.
+   - *Cause*: Foreign keys, partial unique indexes, and immutable engine version constraints enforce relational invariants at the database level.
+   - *Fix*: Inserted test fixtures using `SET LOCAL session_replication_role = replica` and temporary index teardown/recreation in isolated test blocks.
 
 ## 8. Limitations and future work
 
