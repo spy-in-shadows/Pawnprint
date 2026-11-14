@@ -11,6 +11,7 @@ import { claimNextJob } from '../src/workers/jobQueue.js';
 import { JobRunner } from '../src/workers/jobRunner.js';
 import workerEvents from '../src/workers/events.js';
 import { EngineError } from '../src/utils/errors.js';
+import { evaluateMoveQuality } from '../src/chess/evalMath.js';
 
 // Failure modes covered here, one test each:
 //   worker death    - a runner dies mid-job; another runner reclaims it after the stale threshold
@@ -311,10 +312,22 @@ describe.skipIf(!hasBinary)(engineSuite, () => {
     // Fixed-depth single-thread search is only repeatable for an identical search history. The retry
     // runs on a fresh process after ucinewgame and reuses the cached start-position eval, so its hash
     // table differs from the uninterrupted run and evals drift by a few centipawns (we observed up to
-    // ~12 cp at depth 12). The classification is what the analytics consume, so that must match.
-    expect(actual.map((r) => [r.ply, r.classification])).toEqual(expected.map((r) => [r.ply, r.classification]));
+    // ~12 cp at depth 12). Near equality that drift is enough to move a ply across the 1-point
+    // best/good line (Stockfish 15 and 16 both did), so each retried ply must be classified from its
+    // own stored evals and land within one grade of the uninterrupted run.
+    const grades = ['best', 'good', 'inaccuracy', 'mistake', 'blunder'];
+    expect(actual.map((r) => r.ply)).toEqual(expected.map((r) => r.ply));
     actual.forEach((row, i) => {
       expect(Math.abs(row.eval_after_cp - expected[i].eval_after_cp)).toBeLessThanOrEqual(30);
+      const own = evaluateMoveQuality({
+        evalBeforeCp: row.eval_before_cp,
+        evalAfterCp: row.eval_after_cp,
+        moverColor: row.ply % 2 === 1 ? 'white' : 'black',
+      });
+      expect(row.classification).toBe(own.classification);
+      expect(row.cp_loss).toBe(own.cpLoss);
+      const gradeGap = grades.indexOf(row.classification) - grades.indexOf(expected[i].classification);
+      expect(Math.abs(gradeGap)).toBeLessThanOrEqual(1);
     });
   }, 60000);
 
