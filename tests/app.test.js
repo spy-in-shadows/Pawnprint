@@ -1,10 +1,11 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import express from 'express';
 import { createApp } from '../src/app.js';
 import { errorHandler, notFoundHandler } from '../src/middleware/errorHandler.js';
 import {
   AppError, ConflictError, DataError, EngineError, NotFoundError, UnauthorizedError, ValidationError,
 } from '../src/utils/errors.js';
+import { logger } from '../src/utils/logger.js';
 
 function listen(app) {
   return new Promise((resolve) => {
@@ -40,7 +41,7 @@ describe('createApp', () => {
 
 describe('errorHandler', () => {
   let server;
-  let consoleError;
+  let logError;
 
   beforeAll(async () => {
     const app = express();
@@ -51,12 +52,11 @@ describe('errorHandler', () => {
     app.use(notFoundHandler);
     app.use(errorHandler);
     server = await listen(app);
-    consoleError = console.error;
-    console.error = () => {};
+    logError = vi.spyOn(logger, 'error').mockImplementation(() => {});
   });
 
   afterAll(() => {
-    console.error = consoleError;
+    logError.mockRestore();
     return new Promise((resolve) => server.close(resolve));
   });
 
@@ -83,6 +83,7 @@ describe('errorHandler', () => {
     expect(JSON.parse(text)).toEqual({ error: { message: 'Internal server error', code: 'INTERNAL_ERROR' } });
     expect(text).not.toContain('hunter2');
     expect(text).not.toContain('at ');
+    expect(logError).toHaveBeenCalledWith('Request failed', expect.objectContaining({ method: 'GET', url: '/crash' }));
   });
 });
 

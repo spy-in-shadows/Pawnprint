@@ -1,4 +1,5 @@
 import { AppError } from '../utils/errors.js';
+import { logger } from '../utils/logger.js';
 
 export function notFoundHandler(req, res) {
   res.status(404).json({ error: { message: `Route not found: ${req.method} ${req.path}`, code: 'NOT_FOUND' } });
@@ -23,6 +24,6 @@ export function errorHandler(err, req, res, next) {
     return res.status(parserError.status).json({ error: { message: parserError.message, code: parserError.code } });
   }
 
-  console.error(`${req.method} ${req.originalUrl} failed:`, err);
+  logger.error('Request failed', { method: req.method, url: req.originalUrl, err });
   return res.status(500).json({ error: { message: 'Internal server error', code: 'INTERNAL_ERROR' } });
 }
