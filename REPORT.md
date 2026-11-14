@@ -150,7 +150,7 @@ The live system demonstration (`docs/DEMO.md`) provides an 8-minute end-to-end w
 1. **User Onboarding and Ingestion**:
    - Registering a user account and linking a Lichess platform account (`POST /api/v1/accounts`).
    - Triggering game synchronization with optional date range bounds (`POST /api/v1/imports`) or uploading PGN files.
-   - Real-time job polling tracking worker status (`queued` -> `running` -> `finished`).
+   - Real-time job polling tracking worker status (`queued` -> `running` -> `completed`).
 2. **Analysis Worker Execution**:
    - Multi-worker concurrent processing with atomic `SKIP LOCKED` job claiming.
    - Persistent Stockfish process (depth 12, 1 thread, 64 MB hash) evaluating games via N+1 searches with cached starting position evals.
@@ -189,7 +189,7 @@ The live system demonstration (`docs/DEMO.md`) provides an 8-minute end-to-end w
 - **Analysis Worker Throughput**: 142.9 games/min (95.2 plies/sec) across 3 parallel workers on Apple M4.
 - **Summary Table Speedup**: 0.34 ms summary query latency vs 242.25 ms base aggregation (710x speedup).
 - **Engine Call Efficiency**: N+1 engine calls for an N-ply game (40.03 to 40.10 engine calls per 40-ply game).
-- **Automated Test Coverage**: 341 server tests (36 test suites) and 43 client unit tests (6 test suites) passing.
+- **Automated Test Coverage**: 356 server tests (38 test suites) and 43 client unit tests (6 test suites) passing.
 
 ## 7. Development log summary
 
@@ -219,7 +219,7 @@ The live system demonstration (`docs/DEMO.md`) provides an 8-minute end-to-end w
 2. **PostgreSQL Port 5432 Collisions and Shared Fixture Contamination (B5, 15 minutes)**:
    - *What happened*: `docker compose up -d` failed to bind port 5432 due to local host PostgreSQL daemons; once started, claim tests picked up leftover queued jobs from earlier test runs.
    - *Cause*: Port 5432 was occupied by existing host services; concurrent test files left unfinished job fixtures in the shared database.
-   - *Fix*: Configured a dedicated throwaway test container on port 5434 and added pre-test cleanup clearing queued/running jobs before concurrency assertions.
+   - *Fix*: Configured a separate container on port 5433 and added pre-test cleanup clearing queued/running jobs before concurrency assertions.
 3. **Data Quality Test Seeding Blocked by Schema Constraints (B12, 15 minutes)**:
    - *What happened*: Data-quality checks designed to catch orphaned jobs, duplicate active jobs, and duplicate engine versions could not be seeded because PostgreSQL schema constraints rejected invalid rows.
    - *Cause*: Foreign keys, partial unique indexes, and immutable engine version constraints enforce relational invariants at the database level.

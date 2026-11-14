@@ -48,7 +48,7 @@ This script walks through an end-to-end demonstration of the Longitudinal Chess 
 4. **Watch Progress**:
    - The Active Import Job card polls `/api/v1/imports/:id`.
    - Watch Terminal 2: the worker claims the job using `SKIP LOCKED`, launches Stockfish at depth 12, performs N+1 evaluations, detects tactical motifs, and commits evals in an atomic transaction.
-   - The job completes with `status: finished`.
+   - The job completes with `status: completed` (transitioning `queued` -> `running` -> `completed`).
 
 ---
 
@@ -115,13 +115,13 @@ This script walks through an end-to-end demonstration of the Longitudinal Chess 
    ```bash
    npm run dq
    ```
-   Show that all 7 relational integrity checks pass: no missing evals, valid centipawn loss ranges, valid mate constraints, single active job enforcement, and immutable engine versions.
+   Show that all 9 relational integrity checks pass: `analyzed_games_have_all_evals`, `plies_contiguous`, `every_eval_has_classification`, `eval_ranges`, `mate_rows_consistent`, `failed_games_have_reason`, `no_orphan_progress`, `one_active_job_per_account`, and `engine_versions_unreferenced_dupes`.
 2. **Crash-Recovery & Queue Concurrency**:
    ```bash
    npx vitest run tests/claim.concurrency.test.js
    npx vitest run tests/crashRecovery.test.js
    ```
-   Highlight that 40 parallel workers claiming 40 jobs produce exactly 40 distinct winners without deadlock or duplicate claims, and worker process crash recovery automatically respawns Stockfish and resumes incomplete jobs.
+   Highlight that `claim.concurrency.test.js` proves PostgreSQL `SKIP LOCKED` concurrency guarantees: three parallel workers race for 40 queued jobs with exactly 40 jobs claimed and zero double claims, plus single-job and stale-job races where exactly one worker claims the target job. In `crashRecovery.test.js`, worker process crash recovery automatically respawns Stockfish and resumes incomplete jobs without duplicate evaluation rows.
 3. **Performance Benchmarks**:
    - Show `docs/benchmarks/insert.md`: PostgreSQL `UNNEST` delivers an 8.2x speedup over per-row ORM creates.
    - Show `docs/benchmarks/queries.md`: Precomputed summary tables deliver a 710x speedup for dashboard reads.

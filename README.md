@@ -73,7 +73,7 @@ Import tactical training puzzles from the Lichess puzzle bank into the database:
   ```bash
   node scripts/importPuzzles.js /path/to/lichess_db_puzzle.csv
   ```
-- Streaming decompress with zstd:
+- Decompress with zstd:
   ```bash
   zstd -d lichess_db_puzzle.csv.zst
   node scripts/importPuzzles.js lichess_db_puzzle.csv
@@ -117,7 +117,8 @@ Import tactical training puzzles from the Lichess puzzle bank into the database:
 | `npm run bench:throughput` | Runs the multi-worker analysis throughput benchmark |
 | `npm run bench:queries` | Measures execution time across analytics queries with/without indexes and rollups |
 | `npm run dq` | Runs data-quality verification checks across database consistency and invariants |
-| `npm --prefix client run build` | Compiles the React SPA with Vite for production |
+| `npm run import:puzzles` | Imports tactical puzzles from Lichess CSV (`scripts/importPuzzles.js`) |
+| `npm run build:client` | Compiles the React SPA with Vite for production |
 | `npm --prefix client test` | Runs client-side unit tests in Vitest |
 
 ## Benchmark Results
@@ -166,11 +167,12 @@ All data routes require `Authorization: Bearer <jwt>`. Accessing another user's 
 ### Auth
 - `POST /api/v1/auth/register` — Create user account (`{email, password}`)
 - `POST /api/v1/auth/login` — Authenticate and receive JWT (`{email, password}`)
-- `GET /api/v1/auth/me` — Inspect authenticated user profile
+- `GET /api/v1/me` — Inspect authenticated user profile
 
 ### Accounts & Ingestion
 - `GET /api/v1/accounts` — List user's linked chess accounts
 - `POST /api/v1/accounts` — Link a Lichess or Chess.com username
+- `DELETE /api/v1/accounts/:id` — Unlink a chess account
 - `POST /api/v1/imports` — Enqueue import job (`{accountId, maxGames, since, until}`)
 - `GET /api/v1/imports/:id` — Inspect import job status and progress
 - `POST /api/v1/uploads/pgn` — Upload PGN file multipart for parsing and ingestion
