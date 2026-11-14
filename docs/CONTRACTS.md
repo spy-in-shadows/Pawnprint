@@ -8,6 +8,7 @@ All modules are ES modules. Schema and routes follow DESIGN.md sections 4 and 11
 - `games.analysis_status` (`pending` | `analyzed` | `failed`, default `pending`) and `games.failure_reason`.
 - `analysis_jobs`: `max_games` (default 50), `since`, `until`, `failed_games`, `skipped_games`; partial unique index allowing one `queued`/`running` job per account.
 - `player_accounts.last_synced_at`.
+- `analysis_job_games.status` is `pending` | `analyzing` | `done` | `failed`.
 - `move_motifs.kind` (`allowed` | `missed`), primary key `(move_id, motif_id, kind)`.
 - `engine_versions` unique on `(name, version, default_depth, threads, hash_size)`; rows are immutable.
 - `puzzles.phase_tag` (`opening` | `middlegame` | `endgame` | null).
@@ -34,8 +35,10 @@ All modules are ES modules. Schema and routes follow DESIGN.md sections 4 and 11
 | `src/workers/jobQueue.js` (B) | `claimNextJob(workerId)`, `heartbeat(jobId)`, `sweepPoisonJobs(maxAttempts=3)`, `updateGameProgress(jobId, gameId, status, error?)`, `markJobFinished(jobId, {failedGames, skippedGames})`, `markJobFailed(jobId, message)` |
 | `src/chess/stockfishClient.js` (B) | class `StockfishClient({binaryPath, depth, threads, hashSize, positionTimeoutMs=10000, maxCrashes=3, spawnFn})` (defaults from `config`): `init()`, `newGame()`, `evaluatePosition(fen, depth?)` returns `{evalCp, mate, bestUci, depth}` (**all White perspective**: `evalCp` is always a number, the bounded centipawn equivalent via `mateToCp` when the engine reports a mate; `mate` is `null` or the White-perspective mate distance, positive = White mates), `quit()`; props `engineName`, `engineVersion`, `threads`, `hashSize`, `depth`, `crashCount`, `hasCrashedTooManyTimes` |
 | `src/chess/motifs.js` (B) | `detectMotifs({fenBefore, fenAfter, moveUci, bestUci, bestReplyUci, classification})` returns `[{name, kind}]`; `isMissedMate(mateBefore, mateAfter, moverColor)` |
-| `src/services/summary.service.js` (C) | `refreshAccountSummary(accountId)` (rebuilds `account_summary` and `account_phase_summary` rows for the account; idempotent) |
+| `src/services/summary.service.js` (C) | `refreshAccountSummary(accountId)` (rebuilds `account_summary` and `account_phase_summary` rows for the account; idempotent); `getAccountSummary(userId, accountId?)` returns `{accounts:[...]}` |
 | `src/services/drill.js` (C) | `prepareDrill(puzzle)` returns `{startFen, solverColor, setupMove, solverMoves[], opponentReplies[]}` using the Lichess convention (Moves[0] is the opponent's setup move) |
+| `src/workers/engineRegistry.js` (B) | `registerEngineVersion(engine)` returns the `engine_versions` id for the engine's `(engineName, engineVersion, depth, threads, hashSize)`; inserts a row only when none exists, never updates one |
+| `src/workers/dataQuality.js` (B) | `CHECK_NAMES`; `runDataQualityChecks({accountId?})` returns `{ok, violations:[{check, count, sample}]}` (whole database when `accountId` is null) |
 | `src/workers/gameAnalyzer.js` (B) | `analyzeGame({moves}, engine, {engineVersionId, startCache?})` returns the move rows for `saveGameAnalysis`; throws `DataError` for illegal moves/invalid FENs and lets engine errors propagate |
 | `src/workers/events.js` (B) | default `workerEvents` (EventEmitter) emitting `job:started`, `game:done`, `job:failed`, `job:finished` |
 | `src/workers/jobRunner.js` (B) | class `JobRunner(workerId)`: `start()`, `stop()`, `processJob(job)` |

@@ -14,19 +14,22 @@ Team conventions for the Longitudinal Chess Analytics Engine. Every contributor 
 1. **Engine Architecture**: One persistent Stockfish instance per worker process (`Threads=1`, `Hash=64`, fixed `depth=12`). Engine name and version are dynamically parsed from the `id name` UCI handshake line. `engine_versions` records are strictly immutable (unique on name, version, depth, threads, hash).
 2. **Every Eval from Stockfish**: Every evaluation comes directly from Stockfish (never store a fallback or embedded eval). If engine fails or times out, the attempt fails cleanly.
 3. **Position Eval Reuse (N+1 calls)**: Each position is evaluated once. The previous move's "after" evaluation is reused as the next move's "before" evaluation (yielding N+1 engine calls for an N-ply game, instead of 2N). Starting position evals are cached in memory per worker.
-4. **Terminal Positions**: Positions with no legal moves (checkmate and stalemate) are resolved via `chess.js` without calling Stockfish (checkmate = explicit mate score from mover perspective; stalemate = 0 cp).
+4. **Terminal Positions**: Positions that end the game are resolved via `chess.js` without calling Stockfish: checkmate stores `mate_after = 0` and `±MATE_CP` signed by the mover (White-perspective like every stored eval); stalemate, threefold repetition and the fifty-move rule store 0 cp.
 5. **Standard Chess Only**: Only standard chess (`startpos`) is imported. Variants (Chess960, Crazyhouse, etc.) and custom starting FENs are skipped during ingestion and counted in `skipped_games`.
 6. **Error Separation**:
    - **Data errors** (illegal moves, corrupted FENs, invalid PGNs): Mark that individual game as `failed` in `analysis_job_games` with reason; the game is NOT retried, and the job continues.
-   - **Engine errors** (timeout, process crash): Entire job keeps a 3-attempt retry before marking the job `failed`.
+   - **Engine errors** (timeout, process crash): the game is retried up to 3 times, each time on a restarted engine. If the third attempt fails, the job is marked `failed`; games already saved stay `analyzed`, and the next job picks up the ones still `pending`.
+   - A job whose worker dies is reclaimed once its heartbeat is older than `JOB_STALE_SECONDS` (default 120). Every claim increments `attempts`; at 3 attempts the sweeper fails the job.
 7. **One Active Job per Account**: Enforced at the database level via a partial unique index on `analysis_jobs(player_account_id) WHERE status IN ('queued', 'running')`. `POST /imports` returns the existing active job instead of creating a duplicate.
-8. **Game Analysis Status**: Games track `analysis_status` (`pending`, `analyzed`, `failed`) and `failure_reason`. The unanalyzed games query strictly selects `pending` games. Evals are collected in memory and committed atomically in one transaction at game completion.
-9. **User-Driven Cursor Sync**: Ingestion uses `lastSyncedAt` as cursor with support for optional `since` and `until` date range overrides (`since <= until` validated on UI and API).
+8. **Game Analysis Status**: Games track `analysis_status` (`pending`, `analyzed`, `failed`) and `failure_reason`. The unanalyzed games query strictly selects `pending` games. Evals are collected in memory and committed atomically in one transaction at game completion. Per-job progress lives in `analysis_job_games` (`pending`, `analyzing`, `done`, `failed`).
+9. **User-Driven Cursor Sync**: Imports run only when the user asks (`POST /imports` or a PGN upload); there is no scheduler. Platform fetches start from `lastSyncedAt` unless the job carries `since`; `until` is optional (`since <= until` validated on UI and API). The cursor only moves forward and is advanced after the job completes.
 10. **Motif Tag Precision**:
     - Motif tags are tied strictly to Stockfish's actual best reply (`bestReplyUci`), with no speculative candidate replies.
     - Tags distinguish between `kind='allowed'` (player's error allowed a tactic) and `kind='missed'` (player's best move would have executed a tactic or mate).
 11. **Move-Frequency Metric**: `errors_per_100_moves` in `GET /api/v1/analytics/motifs` is an overall move-frequency rate (errors per 100 player moves played), not an opportunity-normalized rate.
 12. **Lichess Puzzle Convention**: In puzzle CSVs, `FEN` is the board BEFORE the opponent's setup move, and `Moves[0]` is that opponent move. The solver applies `Moves[0]` automatically, orients the board for the solver's side, and validates user moves against `Moves[1..]`.
+13. **Summary Tables**: `account_summary` and `account_phase_summary` hold per-account rollups. The worker rebuilds them with `refreshAccountSummary` after each completed job (a failure there is logged and does not fail the job), and `GET /api/v1/analytics/summary` reads them. The other analytics endpoints aggregate the base tables on each request.
+14. **Data-quality checks**: `runDataQualityChecks` (`src/workers/dataQuality.js`) runs for the account at the end of every job and only logs violations; `npm run dq` runs the same checks over the whole database or one account.
 
 ## Rules that must not be broken
 1. Schema stays fully normalized: no JSON blobs for move data, no wide NULL-heavy tables. Mate data goes in `move_mates`, not nullable columns on `move_evals`.
@@ -41,11 +44,14 @@ Team conventions for the Longitudinal Chess Analytics Engine. Every contributor 
 - `docker compose up -d` : start Postgres
 - `npx prisma migrate dev` : apply migrations
 - `npm run seed` : seed lookup tables
-- `node scripts/importPuzzles.js` : import puzzle bank
+- `npm run import:puzzles -- <csv>` : import puzzle bank
 - `npm run dev` : API server
 - `npm run worker` : one worker (run several in separate terminals)
-- `npm test` : run Vitest test suite
+- `npm test` : run Vitest test suite (the engine-backed files skip themselves when `STOCKFISH_PATH` does not exist)
+- `npm run dq` : data-quality checks (`-- --account <id>` for one account)
 - `npm run bench` : insert benchmark
+- `npm run bench:throughput` : worker throughput with 1, 2 and 3 workers
+- `npm run bench:queries` : analytics query benchmark
 
 ## Allowed dependencies
 Adding any package not listed here needs B's approval (update this list in the same PR).

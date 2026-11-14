@@ -1,10 +1,49 @@
 # Longitudinal Chess Analytics Engine: Final Report
 
 ## 1. Problem and design
-TODO(B)
+A single game tells a player little; patterns across hundreds of games (which openings go wrong, whether accuracy drops in the endgame or under time pressure, which tactics keep being missed) need every move of every game evaluated the same way and stored so it can be queried over time.
+
+The system imports a player's games from Lichess, Chess.com or a PGN upload, evaluates every ply with Stockfish, stores the results in a normalized PostgreSQL schema and serves longitudinal analytics and a puzzle training plan over a REST API with a React client.
+
+- **Two processes, one database.** The Express API (`src/server.js`) only enqueues `analysis_jobs` rows. Workers (`src/worker.js`, any number) claim them with a single `UPDATE ... FOR UPDATE SKIP LOCKED` statement, keep a heartbeat, and a stale job is reclaimed by another worker. One active job per account is enforced by a partial unique index.
+- **Engine.** Each worker keeps one persistent Stockfish process (Threads 1, Hash 64 MB, fixed depth 12). The engine name and version come from the UCI handshake and are stored in immutable `engine_versions` rows. Every eval comes from Stockfish, never from a fallback. Each position is searched once, so an N-ply game needs N+1 engine calls, and positions that end the game are resolved with chess.js without the engine.
+- **Storage.** Moves go in with one `UNNEST` insert per game. Evals, mates, classifications and motif tags live in separate narrow tables and are written in one transaction when the game's analysis finishes, so a failed game leaves no partial rows. Data errors fail one game without retry; engine errors are retried 3 times on a restarted engine.
+- **Analysis.** Stored evals are White-perspective centipawns. Moves are classified on the drop in win probability, phases come from material and ply, and rule-based motif tags are tied to Stockfish's best reply (`allowed` or `missed`).
+- **Product.** Analytics endpoints for openings, phases, time pressure, trend and motifs aggregate the owner's moves; per-account summary tables serve the dashboard; the training plan picks Lichess puzzles that match the weakest motifs and opening/phase combinations.
+
+DESIGN.md is the full design; ENGINEERING.md lists the decisions and rules.
 
 ## 2. Team and workflow
-TODO(B)
+| Person | Area |
+|---|---|
+| A (07shlokjoshi) | Infrastructure and CI, config and logging, schema and seeds, PGN parser, bulk insert repository, platform clients and import service, insert benchmark, puzzle importer |
+| B (spy-in-shadows, repository owner) | Eval maths, phases, FEN validation, Stockfish client, job queue, game analyzer and job runner, data-quality checks, motif detection, crash-recovery tests, throughput benchmark, end-to-end test, design documents |
+| C (Shailja-Vatsa) | Auth and games endpoints, analytics endpoints, accounts, imports and uploads, training plans and middleware, query evidence and summary tables, React client |
+
+**Workflow.** Each PR was built on its own branch from a short sequence of prompts, rebased onto `main` before review and merged with a rebase merge after another team member approved it. `docs/CONTRACTS.md` fixed every cross-owner module signature up front, so work in one area could start before the modules it called existed; signature changes needed B's approval. `scripts/preflight.sh` checked each commit and branch for files outside the author's area, debug output and style problems before it was pushed. Non-trivial problems went into `docs/DEV_LOG.md`.
+
+**Merged PRs, in merge order (waves by dependency).**
+
+| Wave | PR | Title | Merged |
+|---|---|---|---|
+| 1. Foundation | #1 | PR-B1: Evaluation math, phase classifier and FEN validation | 2026-11-11 |
+| | #3 | PR-A1: Infrastructure, config loader, logging and CI | 2026-11-12 |
+| | #4 | PR-B2: Stockfish UCI client and resilience | 2026-11-12 |
+| | #5 | PR-A2: Database schema, seeds, Prisma client and pg pool | 2026-11-12 |
+| | #2 | PR-C6: Client scaffold, auth pages, accounts and import views | 2026-11-12 |
+| 2. Ingestion and API | #6 | PR-A3: Streaming PGN parser and transactional bulk repository | 2026-11-12 |
+| | #7 | PR-C1: Authentication and games endpoints | 2026-11-12 |
+| | #8 | PR-B3: Postgres job queue and concurrency test | 2026-11-13 |
+| | #9 | Audit fixes after round 3 | 2026-11-13 |
+| | #10 | PR-C3: Analytics endpoints | 2026-11-13 |
+| | #11 | PR-A4: Platform clients and import service | 2026-11-13 |
+| 3. Pipeline and product | #12 | PR-B4: Game analyzer, job runner and error partitioning | 2026-11-13 |
+| | #13 | PR-C3: Accounts, imports and PGN upload | 2026-11-13 |
+| | #14 | PR-C5: Training plans, health, middleware and static serving | 2026-11-13 |
+| 4. Quality and performance | #15 | PR-B5: Data-quality checks and tactical motif detection | 2026-11-14 |
+| | #16 | PR-A5: Insert benchmark and puzzle importer | 2026-11-14 |
+| | #17 | PR-C4: Query evidence, indexes, summary tables and query benchmark | 2026-11-14 |
+| 5. Verification | PR-B6 | Crash-recovery tests, throughput benchmark and end-to-end test | open |
 
 ## 3. Schema and insert benchmark
 
@@ -109,4 +148,31 @@ TODO(C)
 TODO(all)
 
 ## 8. Limitations and future work
-TODO(B)
+
+**Rule-based or approximate**
+- Motif tags are board-geometry rules applied to the position after the move and after Stockfish's single best reply. They look one reply deep and can mislabel: in the end-to-end test, the Fool's-mate blunder 2. g4 is tagged `back_rank` and `pin` rather than as allowing a mate.
+- Move classification uses fixed win-probability thresholds on a cp-to-win-probability curve; neither has been calibrated against human ratings.
+- Game phases come from a material and ply threshold, not from a trained model, so transitions are approximate.
+- `errors_per_100_moves` is a move-frequency rate. It does not count how often a motif was actually possible, so it cannot separate "rarely faced" from "rarely missed".
+- Depth 12 with one thread is shallow for deep tactics, and evals do not repeat exactly between runs: a retried game differed by up to about 12 cp (classifications matched) because the hash table differs after a restart.
+- Openings come only from the ECO header of the game; there is no move-based opening classifier, and the seeded opening table is small.
+- The training plan compares the player's game rating with Lichess puzzle ratings, which are on different scales. Puzzle phase tags come only from the puzzle themes.
+- Time-pressure analytics leave out every move without a clock (most hand-written PGNs), and correspondence games.
+
+**Known issues**
+- `GET /imports/:id` counts `completedGames` from `analysis_job_games.status = 'completed'`, but the worker writes `done`, so the count stays at 0. Job `status`, `totalGames` and `failedGames` are correct.
+- Raw `pg` writes of JS Dates in `moveBulk.repo.js` use the host's local time zone, while Prisma stores UTC wall-clock time (DEV_LOG, B10). CI on UTC hides it; on another zone `played_at` is shifted.
+- The rate limiter keeps its counters in process memory, so it does not hold across several API processes.
+- Data-quality checks only log violations after each job; nothing alerts or repairs.
+
+**Untested or measured only at small scale**
+- The Lichess and Chess.com clients are tested against mocked `fetch` responses; no test calls the live APIs.
+- Throughput was measured with 1 to 3 workers on one laptop; more workers, several hosts and API load were not tested.
+- Query timings come from one 10k-game dataset for a single user; multi-user indexes were added on projection, not on measurement.
+- The React client has no browser end-to-end test; the end-to-end test drives the HTTP API.
+
+**Future work**
+- Fix the two known issues above (job progress count, `pg` date handling).
+- Detect motifs from the engine's principal variation instead of one reply, and normalize motif rates by opportunities.
+- Scheduled background sync per account, and incremental summary refresh instead of a full rebuild.
+- Multi-PV or deeper searches for critical positions only, keeping depth 12 elsewhere.
