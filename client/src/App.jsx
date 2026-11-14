@@ -8,7 +8,7 @@ import { ImportView } from './pages/ImportView';
 import { DashboardView } from './pages/DashboardView';
 import { GamesView } from './pages/GamesView';
 import { GameView } from './pages/GameView';
-import { TrainingPage } from './pages/Placeholders';
+import { TrainingPlanView } from './pages/TrainingPlanView';
 
 export function App() {
   return (
@@ -53,7 +53,7 @@ export function App() {
           path="training"
           element={
             <ProtectedRoute>
-              <TrainingPage />
+              <TrainingPlanView />
             </ProtectedRoute>
           }
         />
