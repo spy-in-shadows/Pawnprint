@@ -204,7 +204,7 @@ export async function cleanupBenchmarkData(keep = false) {
   if (keep) return;
 
   const accounts = await prisma.playerAccount.findMany({
-    where: { username: { startsWith: 'bench' } },
+    where: { user: { email: BENCH_USER_EMAIL } },
     select: { id: true },
   });
 
