@@ -1,12 +1,13 @@
 import { createApp } from './app.js';
 import config from './config/env.js';
+import { logger } from './utils/logger.js';
 
 const server = createApp().listen(config.port, () => {
-  console.log(`API listening on http://localhost:${server.address().port}`);
+  logger.info('API listening', { url: `http://localhost:${server.address().port}` });
 });
 
 function shutdown(signal) {
-  console.log(`${signal} received, closing server`);
+  logger.info('API stopping', { signal });
   server.close(() => process.exit(0));
 }
 
