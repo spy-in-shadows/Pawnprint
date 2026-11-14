@@ -209,9 +209,11 @@ describe.skipIf(!hasBinary)(engineSuite, () => {
     expect(foolsMate.moves[3].mate.mateAfter).toBe(0);
     expect(foolsMate.moves[3].eval.evalAfterCp).toBe(-10000);
 
-    // 4. Nxe5?? walks into Qg5, which forks the knight and g2.
+    // 4. Nxe5 walks into Qg5, which forks the knight and g2. How large an error it is depends on the
+    // engine build (Stockfish 19 at depth 12 calls it a mistake or blunder, the Stockfish 16 that CI
+    // installs from apt calls it an inaccuracy), so only require that it is flagged at all.
     const trap = plies[14];
-    expect(['mistake', 'blunder']).toContain(trap.moves[6].classification);
+    expect(['inaccuracy', 'mistake', 'blunder']).toContain(trap.moves[6].classification);
     expect(trap.moves.filter((m) => m.moverColor === 'white' && m.classification === 'blunder').length)
       .toBeGreaterThan(0);
 
