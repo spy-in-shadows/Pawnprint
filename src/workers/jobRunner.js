@@ -8,6 +8,7 @@ import { logger } from '../utils/logger.js';
 import { analyzeGame } from './gameAnalyzer.js';
 import { registerEngineVersion } from './engineRegistry.js';
 import { runDataQualityChecks } from './dataQuality.js';
+import { refreshAccountSummary } from '../services/summary.service.js';
 import {
   claimNextJob,
   heartbeat,
@@ -211,6 +212,15 @@ export class JobRunner {
       }
 
       await markJobFinished(jobId, { failedGames, skippedGames: ingested.skippedGames });
+      try {
+        await refreshAccountSummary(accountId);
+      } catch (summaryErr) {
+        this.log.warn('Failed to refresh account summary after job completion', {
+          jobId,
+          accountId,
+          err: summaryErr,
+        });
+      }
       await this._advanceCursor(jobId, accountId, ingested.newestPlayedAt);
       await this._checkDataQuality(jobId, accountId);
 

@@ -11,5 +11,6 @@ router.get('/phases', analyticsController.phases);
 router.get('/time-pressure', analyticsController.timePressure);
 router.get('/trend', analyticsController.trend);
 router.get('/motifs', analyticsController.motifs);
+router.get('/summary', analyticsController.summary);
 
 export default router;

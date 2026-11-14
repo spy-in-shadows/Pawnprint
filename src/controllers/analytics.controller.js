@@ -45,12 +45,22 @@ export async function motifs(req, res, next) {
   }
 }
 
+export async function summary(req, res, next) {
+  try {
+    const data = await analyticsService.getSummary(req.user.id, req.query);
+    res.status(200).json(data);
+  } catch (err) {
+    next(err);
+  }
+}
+
 export const analyticsController = {
   openings,
   phases,
   timePressure,
   trend,
   motifs,
+  summary,
 };
 
 export default analyticsController;

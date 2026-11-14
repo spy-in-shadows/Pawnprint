@@ -1,4 +1,5 @@
 import * as analyticsRepo from '../repositories/analytics.repo.js';
+import * as summaryService from './summary.service.js';
 import { ValidationError } from '../utils/errors.js';
 
 const MAX_INT32 = 2147483647;
@@ -75,6 +76,18 @@ export async function getWeakestMotifs(userId, options = {}) {
   return analyticsRepo.getWeakestMotifs({ userId, ...options });
 }
 
+export async function getSummary(userId, query = {}) {
+  let validatedAccountId;
+  if (query.accountId !== undefined && query.accountId !== null && query.accountId !== '') {
+    const num = Number(query.accountId);
+    if (!Number.isInteger(num) || num <= 0 || num > MAX_INT32) {
+      throw new ValidationError('accountId must be a positive integer');
+    }
+    validatedAccountId = num;
+  }
+  return summaryService.getAccountSummary(userId, validatedAccountId);
+}
+
 export const analyticsService = {
   getOpenings,
   getPhases,
@@ -83,6 +96,7 @@ export const analyticsService = {
   getMotifs,
   getWeakestOpeningPhases,
   getWeakestMotifs,
+  getSummary,
 };
 
 export default analyticsService;
