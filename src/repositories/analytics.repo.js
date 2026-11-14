@@ -175,6 +175,7 @@ export const TREND_SQL = `
     ORDER BY day ASC;
 `;
 
+// Move-frequency rate: errors per 100 of the owner's moves played, NOT opportunity-normalized.
 export const MOTIFS_SQL = `
     WITH owner_moves AS (
       SELECT COUNT(m.id)::int AS total_moves
