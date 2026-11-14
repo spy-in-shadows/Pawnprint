@@ -4,7 +4,7 @@ import { logger } from './utils/logger.js';
 import { JobRunner } from './workers/jobRunner.js';
 import workerEvents from './workers/events.js';
 
-const workerId = `${os.hostname()}-${process.pid}`;
+const workerId = `${process.env.WORKER_ID_PREFIX || os.hostname()}-${process.pid}`;
 const log = logger.child({ workerId });
 const runner = new JobRunner(workerId);
 

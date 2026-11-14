@@ -59,7 +59,18 @@ We executed the full scale ingestion run using the `unnest` strategy across 10,0
 - PostgreSQL `UNNEST` delivers peak throughput (~13,033 moves/sec on 1,000 games, 8.2x faster than per-row) while preserving transactional atomicity and idempotency.
 
 ## 4. Pipeline and throughput
-TODO(B)
+
+`node scripts/benchmarkThroughput.js --games 30 --workers 1,2,3` on an Apple M4 (10 cores: 4 performance, 6 efficiency, 16 GB), Stockfish 19 at depth 12, 1 thread and 64 MB hash per worker, PostgreSQL 16 in Docker. Full method and machine details are in `docs/benchmarks/throughput.md`.
+
+| Workers | Games | Plies | Wall time | Games / min | Plies / sec | Engine calls / game | Speedup | Failed jobs |
+| ------: | ----: | ----: | --------: | ----------: | ----------: | ------------------: | ------: | ----------: |
+| 1 | 30 | 1200 | 35.4 s | 50.9 | 33.9 | 40.03 | 1.00x | 0 |
+| 2 | 30 | 1200 | 20.4 s | 88.2 | 58.8 | 40.07 | 1.73x | 0 |
+| 3 | 30 | 1200 | 12.6 s | 142.9 | 95.2 | 40.10 | 2.81x | 0 |
+
+- Throughput scales almost linearly up to 3 workers because each worker is one single-threaded Stockfish search on its own core; the work is engine-bound, and Postgres (one atomic write per game plus job heartbeats) is idle for most of the run.
+- The 2-worker run is below 2x because parallelism is per account: one 15-game job took 19.9 s and the other 15.7 s, so wall time follows the slower job. Engine calls stay at N + 1 per game, plus one start-position search per worker.
+- On this machine the limit beyond 3 to 4 workers is the 4 performance cores (further workers land on slower efficiency cores), then the per-account job split; each worker also adds its own 64 MB hash, and Postgres only becomes a factor once many workers commit at the same time.
 
 ## 5. Analytics and query benchmarks
 
