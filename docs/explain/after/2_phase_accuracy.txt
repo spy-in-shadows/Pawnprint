@@ -1,0 +1,65 @@
+Finalize GroupAggregate  (cost=22297.84..22523.26 rows=1270 width=68) (actual time=87.602..88.704 rows=2 loops=1)
+  Group Key: p.id
+  Buffers: shared hit=9011
+  ->  Gather Merge  (cost=22297.84..22443.89 rows=1270 width=108) (actual time=87.593..88.694 rows=4 loops=1)
+        Workers Planned: 1
+        Workers Launched: 1
+        Buffers: shared hit=9011
+        ->  Sort  (cost=21297.83..21301.00 rows=1270 width=108) (actual time=85.592..85.596 rows=2 loops=2)
+              Sort Key: p.id
+              Sort Method: quicksort  Memory: 25kB
+              Buffers: shared hit=9011
+              Worker 0:  Sort Method: quicksort  Memory: 25kB
+              ->  Partial HashAggregate  (cost=21219.65..21232.35 rows=1270 width=108) (actual time=85.582..85.589 rows=2 loops=2)
+                    Group Key: p.id
+                    Batches: 1  Memory Usage: 73kB
+                    Buffers: shared hit=9004
+                    Worker 0:  Batches: 1  Memory Usage: 73kB
+                    ->  Hash Left Join  (cost=11817.40..17995.31 rows=117249 width=76) (actual time=40.798..73.604 rows=100000 loops=2)
+                          Hash Cond: (mc.classification_id = c.id)
+                          Buffers: shared hit=9004
+                          ->  Parallel Hash Right Join  (cost=11778.82..17647.93 rows=117249 width=48) (actual time=40.786..66.705 rows=100000 loops=2)
+                                Hash Cond: (mc.move_id = m.id)
+                                Buffers: shared hit=9002
+                                ->  Parallel Seq Scan on move_classifications mc  (cost=0.00..4515.97 rows=235297 width=12) (actual time=0.002..6.004 rows=200002 loops=2)
+                                      Buffers: shared hit=2163
+                                ->  Parallel Hash  (cost=10778.44..10778.44 rows=80031 width=40) (actual time=40.396..40.398 rows=100000 loops=2)
+                                      Buckets: 262144  Batches: 1  Memory Usage: 12256kB
+                                      Buffers: shared hit=6836
+                                      ->  Hash Join  (cost=737.71..10778.44 rows=80031 width=40) (actual time=2.222..32.802 rows=100000 loops=2)
+                                            Hash Cond: (m.phase_id = p.id)
+                                            Buffers: shared hit=6836
+                                            ->  Hash Join  (cost=699.13..10529.08 rows=80031 width=8) (actual time=2.213..26.127 rows=100000 loops=2)
+                                                  Hash Cond: ((m.game_id = g.id) AND (m.mover_color = g.color))
+                                                  Buffers: shared hit=6834
+                                                  ->  Parallel Seq Scan on moves m  (cost=0.00..7825.08 rows=160608 width=18) (actual time=0.003..6.422 rows=200010 loops=2)
+                                                        Buffers: shared hit=6219
+                                                  ->  Hash  (cost=549.34..549.34 rows=9986 width=10) (actual time=2.184..2.185 rows=10000 loops=2)
+                                                        Buckets: 16384  Batches: 1  Memory Usage: 539kB
+                                                        Buffers: shared hit=598
+                                                        ->  Nested Loop  (cost=0.00..549.34 rows=9986 width=10) (actual time=0.118..1.475 rows=10000 loops=2)
+                                                              Buffers: shared hit=598
+                                                              ->  Seq Scan on player_accounts pa  (cost=0.00..2.24 rows=1 width=4) (actual time=0.004..0.005 rows=1 loops=2)
+                                                                    Filter: ((id = 4170) AND (user_id = 3006))
+                                                                    Rows Removed by Filter: 15
+                                                                    Buffers: shared hit=4
+                                                              ->  Seq Scan on games g  (cost=0.00..447.24 rows=9986 width=14) (actual time=0.114..0.951 rows=10000 loops=2)
+                                                                    Filter: ((player_account_id = 4170) AND (analysis_status = 'analyzed'::text))
+                                                                    Rows Removed by Filter: 16
+                                                                    Buffers: shared hit=594
+                                            ->  Hash  (cost=22.70..22.70 rows=1270 width=36) (actual time=0.005..0.005 rows=3 loops=2)
+                                                  Buckets: 2048  Batches: 1  Memory Usage: 17kB
+                                                  Buffers: shared hit=2
+                                                  ->  Seq Scan on phases p  (cost=0.00..22.70 rows=1270 width=36) (actual time=0.003..0.003 rows=3 loops=2)
+                                                        Buffers: shared hit=2
+                          ->  Hash  (cost=22.70..22.70 rows=1270 width=36) (actual time=0.007..0.007 rows=5 loops=2)
+                                Buckets: 2048  Batches: 1  Memory Usage: 17kB
+                                Buffers: shared hit=2
+                                ->  Seq Scan on classifications c  (cost=0.00..22.70 rows=1270 width=36) (actual time=0.005..0.005 rows=5 loops=2)
+                                      Buffers: shared hit=2
+Planning:
+  Buffers: shared hit=67
+Planning Time: 0.388 ms
+Execution Time: 88.745 ms
+
+Summary: Execution Time = 88.745 ms

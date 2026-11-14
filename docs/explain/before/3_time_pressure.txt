@@ -1,0 +1,72 @@
+Sort  (cost=24751.74..24752.44 rows=280 width=60) (actual time=102.970..104.148 rows=1 loops=1)
+  Sort Key: (CASE (CASE WHEN (((m.clock_remaining_ms)::numeric / ((tc.base_seconds * 1000))::numeric) > 0.50) THEN '>50%'::text WHEN (((m.clock_remaining_ms)::numeric / ((tc.base_seconds * 1000))::numeric) > 0.25) THEN '25-50%'::text WHEN (((m.clock_remaining_ms)::numeric / ((tc.base_seconds * 1000))::numeric) >= 0.10) THEN '10-25%'::text ELSE '<10%'::text END) WHEN '>50%'::text THEN 1 WHEN '25-50%'::text THEN 2 WHEN '10-25%'::text THEN 3 WHEN '<10%'::text THEN 4 ELSE NULL::integer END)
+  Sort Method: quicksort  Memory: 25kB
+  Buffers: shared hit=9009
+  ->  Finalize GroupAggregate  (cost=24670.36..24740.36 rows=280 width=60) (actual time=102.968..104.146 rows=1 loops=1)
+        Group Key: (CASE WHEN (((m.clock_remaining_ms)::numeric / ((tc.base_seconds * 1000))::numeric) > 0.50) THEN '>50%'::text WHEN (((m.clock_remaining_ms)::numeric / ((tc.base_seconds * 1000))::numeric) > 0.25) THEN '25-50%'::text WHEN (((m.clock_remaining_ms)::numeric / ((tc.base_seconds * 1000))::numeric) >= 0.10) THEN '10-25%'::text ELSE '<10%'::text END)
+        Buffers: shared hit=9009
+        ->  Gather Merge  (cost=24670.36..24702.56 rows=280 width=88) (actual time=102.959..104.137 rows=2 loops=1)
+              Workers Planned: 1
+              Workers Launched: 1
+              Buffers: shared hit=9009
+              ->  Sort  (cost=23670.35..23671.05 rows=280 width=88) (actual time=100.504..100.508 rows=1 loops=2)
+                    Sort Key: (CASE WHEN (((m.clock_remaining_ms)::numeric / ((tc.base_seconds * 1000))::numeric) > 0.50) THEN '>50%'::text WHEN (((m.clock_remaining_ms)::numeric / ((tc.base_seconds * 1000))::numeric) > 0.25) THEN '25-50%'::text WHEN (((m.clock_remaining_ms)::numeric / ((tc.base_seconds * 1000))::numeric) >= 0.10) THEN '10-25%'::text ELSE '<10%'::text END)
+                    Sort Method: quicksort  Memory: 25kB
+                    Buffers: shared hit=9009
+                    Worker 0:  Sort Method: quicksort  Memory: 25kB
+                    ->  Partial HashAggregate  (cost=23645.67..23658.97 rows=280 width=88) (actual time=100.495..100.499 rows=1 loops=2)
+                          Group Key: CASE WHEN (((m.clock_remaining_ms)::numeric / ((tc.base_seconds * 1000))::numeric) > 0.50) THEN '>50%'::text WHEN (((m.clock_remaining_ms)::numeric / ((tc.base_seconds * 1000))::numeric) > 0.25) THEN '25-50%'::text WHEN (((m.clock_remaining_ms)::numeric / ((tc.base_seconds * 1000))::numeric) >= 0.10) THEN '10-25%'::text ELSE '<10%'::text END
+                          Batches: 1  Memory Usage: 37kB
+                          Buffers: shared hit=9001
+                          Worker 0:  Batches: 1  Memory Usage: 37kB
+                          ->  Hash Left Join  (cost=11605.53..22180.10 rows=117245 width=80) (actual time=38.360..90.977 rows=100000 loops=2)
+                                Hash Cond: (mc.classification_id = c.id)
+                                Buffers: shared hit=9001
+                                ->  Parallel Hash Right Join  (cost=11566.96..17436.05 rows=117245 width=20) (actual time=38.336..73.118 rows=100000 loops=2)
+                                      Hash Cond: (mc.move_id = m.id)
+                                      Buffers: shared hit=8999
+                                      ->  Parallel Seq Scan on move_classifications mc  (cost=0.00..4515.97 rows=235297 width=12) (actual time=0.004..6.663 rows=200002 loops=2)
+                                            Buffers: shared hit=2163
+                                      ->  Parallel Hash  (cost=10566.59..10566.59 rows=80029 width=12) (actual time=37.961..37.964 rows=100000 loops=2)
+                                            Buckets: 262144  Batches: 1  Memory Usage: 11456kB
+                                            Buffers: shared hit=6822
+                                            ->  Hash Join  (cost=736.72..10566.59 rows=80029 width=12) (actual time=2.942..29.357 rows=100000 loops=2)
+                                                  Hash Cond: ((m.game_id = g.id) AND (m.mover_color = g.color))
+                                                  Buffers: shared hit=6822
+                                                  ->  Parallel Seq Scan on moves m  (cost=0.00..7825.08 rows=160602 width=18) (actual time=0.004..11.273 rows=200004 loops=2)
+                                                        Filter: (clock_remaining_ms IS NOT NULL)
+                                                        Rows Removed by Filter: 6
+                                                        Buffers: shared hit=6219
+                                                  ->  Hash  (cost=586.93..586.93 rows=9986 width=14) (actual time=2.921..2.922 rows=10000 loops=2)
+                                                        Buckets: 16384  Batches: 1  Memory Usage: 597kB
+                                                        Buffers: shared hit=600
+                                                        ->  Hash Join  (cost=1.27..586.93 rows=9986 width=14) (actual time=0.137..2.167 rows=10000 loops=2)
+                                                              Hash Cond: (g.time_control_id = tc.id)
+                                                              Buffers: shared hit=600
+                                                              ->  Nested Loop  (cost=0.00..549.34 rows=9986 width=14) (actual time=0.126..1.421 rows=10000 loops=2)
+                                                                    Buffers: shared hit=598
+                                                                    ->  Seq Scan on player_accounts pa  (cost=0.00..2.24 rows=1 width=4) (actual time=0.003..0.004 rows=1 loops=2)
+                                                                          Filter: ((id = 4170) AND (user_id = 3006))
+                                                                          Rows Removed by Filter: 15
+                                                                          Buffers: shared hit=4
+                                                                    ->  Seq Scan on games g  (cost=0.00..447.24 rows=9986 width=18) (actual time=0.123..0.948 rows=10000 loops=2)
+                                                                          Filter: ((player_account_id = 4170) AND (analysis_status = 'analyzed'::text))
+                                                                          Rows Removed by Filter: 16
+                                                                          Buffers: shared hit=594
+                                                              ->  Hash  (cost=1.14..1.14 rows=11 width=8) (actual time=0.006..0.007 rows=11 loops=2)
+                                                                    Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                                                                    Buffers: shared hit=2
+                                                                    ->  Seq Scan on time_controls tc  (cost=0.00..1.14 rows=11 width=8) (actual time=0.004..0.004 rows=11 loops=2)
+                                                                          Filter: ((base_seconds IS NOT NULL) AND (base_seconds > 0))
+                                                                          Buffers: shared hit=2
+                                ->  Hash  (cost=22.70..22.70 rows=1270 width=36) (actual time=0.009..0.009 rows=5 loops=2)
+                                      Buckets: 2048  Batches: 1  Memory Usage: 17kB
+                                      Buffers: shared hit=2
+                                      ->  Seq Scan on classifications c  (cost=0.00..22.70 rows=1270 width=36) (actual time=0.007..0.007 rows=5 loops=2)
+                                            Buffers: shared hit=2
+Planning:
+  Buffers: shared hit=82
+Planning Time: 0.468 ms
+Execution Time: 104.186 ms
+
+Summary: Execution Time = 104.186 ms

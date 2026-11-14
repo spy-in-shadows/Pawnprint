@@ -1,7 +1,6 @@
 import { pgPool } from '../config/db.js';
 
-export async function getOpenings({ userId, accountId, from, to }) {
-  const sql = `
+export const OPENINGS_SQL = `
     SELECT
       COALESCE(o.eco, 'Unknown') AS eco,
       COALESCE(o.name, 'Unknown Opening') AS name,
@@ -35,14 +34,9 @@ export async function getOpenings({ userId, accountId, from, to }) {
       AND m.mover_color = g.color
     GROUP BY o.eco, o.name, "plyBucket"
     ORDER BY o.eco ASC, "plyBucket" ASC;
-  `;
+`;
 
-  const res = await pgPool.query(sql, [userId, accountId || null, from || null, to || null]);
-  return res.rows;
-}
-
-export async function getPhases({ userId, accountId, from, to }) {
-  const sql = `
+export const PHASES_SQL = `
     SELECT
       p.name AS phase,
       COUNT(m.id)::int AS moves,
@@ -71,14 +65,9 @@ export async function getPhases({ userId, accountId, from, to }) {
       AND m.mover_color = g.color
     GROUP BY p.name, p.id
     ORDER BY p.id ASC;
-  `;
+`;
 
-  const res = await pgPool.query(sql, [userId, accountId || null, from || null, to || null]);
-  return res.rows;
-}
-
-export async function getTimePressure({ userId, accountId, from, to }) {
-  const countSql = `
+export const TIME_PRESSURE_COUNT_SQL = `
     SELECT
       COUNT(CASE WHEN tc.base_seconds IS NULL OR tc.base_seconds = 0 OR m.clock_remaining_ms IS NULL THEN 1 END)::int AS "excludedMoves"
     FROM moves m
@@ -91,9 +80,9 @@ export async function getTimePressure({ userId, accountId, from, to }) {
       AND ($4::timestamp IS NULL OR g.played_at <= $4)
       AND g.analysis_status = 'analyzed'
       AND m.mover_color = g.color;
-  `;
+`;
 
-  const bucketsSql = `
+export const TIME_PRESSURE_BUCKETS_SQL = `
     WITH bucketed_moves AS (
       SELECT
         m.id,
@@ -142,21 +131,9 @@ export async function getTimePressure({ userId, accountId, from, to }) {
         WHEN '10-25%' THEN 3
         WHEN '<10%' THEN 4
       END ASC;
-  `;
+`;
 
-  const [countRes, bucketsRes] = await Promise.all([
-    pgPool.query(countSql, [userId, accountId || null, from || null, to || null]),
-    pgPool.query(bucketsSql, [userId, accountId || null, from || null, to || null]),
-  ]);
-
-  return {
-    items: bucketsRes.rows,
-    excludedMoves: countRes.rows[0]?.excludedMoves ?? 0,
-  };
-}
-
-export async function getTrend({ userId, accountId, from, to }) {
-  const sql = `
+export const TREND_SQL = `
     WITH daily_stats AS (
       SELECT
         DATE_TRUNC('day', g.played_at)::date AS day,
@@ -196,15 +173,9 @@ export async function getTrend({ userId, accountId, from, to }) {
       )::float AS "rollingAccuracyPct"
     FROM daily_stats
     ORDER BY day ASC;
-  `;
+`;
 
-  const res = await pgPool.query(sql, [userId, accountId || null, from || null, to || null]);
-  return res.rows;
-}
-
-export async function getMotifs({ userId, accountId, from, to }) {
-  // Move-frequency rate: errors per 100 of the owner's moves played, NOT opportunity-normalized.
-  const sql = `
+export const MOTIFS_SQL = `
     WITH owner_moves AS (
       SELECT COUNT(m.id)::int AS total_moves
       FROM moves m
@@ -240,14 +211,9 @@ export async function getMotifs({ userId, accountId, from, to }) {
       AND m.mover_color = g.color
     GROUP BY mot.name, mm.kind, om.total_moves
     ORDER BY "errorsPer100Moves" DESC, "errorCount" DESC, mot.name ASC, mm.kind ASC;
-  `;
+`;
 
-  const res = await pgPool.query(sql, [userId, accountId || null, from || null, to || null]);
-  return res.rows;
-}
-
-export async function getWeakestOpeningPhases({ userId, limit = 2, minMoves = 20 }) {
-  const sql = `
+export const WEAKEST_OPENING_PHASES_SQL = `
     SELECT
       COALESCE(o.eco, 'Unknown') AS eco,
       COALESCE(o.name, 'Unknown Opening') AS name,
@@ -269,14 +235,9 @@ export async function getWeakestOpeningPhases({ userId, limit = 2, minMoves = 20
     HAVING COUNT(m.id) >= $2
     ORDER BY "avgCpLoss" DESC, "errorCount" DESC
     LIMIT $3;
-  `;
+`;
 
-  const res = await pgPool.query(sql, [userId, minMoves, limit]);
-  return res.rows;
-}
-
-export async function getWeakestMotifs({ userId, limit = 3 }) {
-  const sql = `
+export const WEAKEST_MOTIFS_SQL = `
     SELECT
       mot.name AS motif,
       COUNT(mm.move_id)::int AS "errorCount"
@@ -291,9 +252,47 @@ export async function getWeakestMotifs({ userId, limit = 3 }) {
     GROUP BY mot.name
     ORDER BY "errorCount" DESC, mot.name ASC
     LIMIT $2;
-  `;
+`;
 
-  const res = await pgPool.query(sql, [userId, limit]);
+export async function getOpenings({ userId, accountId, from, to }) {
+  const res = await pgPool.query(OPENINGS_SQL, [userId, accountId || null, from || null, to || null]);
+  return res.rows;
+}
+
+export async function getPhases({ userId, accountId, from, to }) {
+  const res = await pgPool.query(PHASES_SQL, [userId, accountId || null, from || null, to || null]);
+  return res.rows;
+}
+
+export async function getTimePressure({ userId, accountId, from, to }) {
+  const [countRes, bucketsRes] = await Promise.all([
+    pgPool.query(TIME_PRESSURE_COUNT_SQL, [userId, accountId || null, from || null, to || null]),
+    pgPool.query(TIME_PRESSURE_BUCKETS_SQL, [userId, accountId || null, from || null, to || null]),
+  ]);
+
+  return {
+    items: bucketsRes.rows,
+    excludedMoves: countRes.rows[0]?.excludedMoves ?? 0,
+  };
+}
+
+export async function getTrend({ userId, accountId, from, to }) {
+  const res = await pgPool.query(TREND_SQL, [userId, accountId || null, from || null, to || null]);
+  return res.rows;
+}
+
+export async function getMotifs({ userId, accountId, from, to }) {
+  const res = await pgPool.query(MOTIFS_SQL, [userId, accountId || null, from || null, to || null]);
+  return res.rows;
+}
+
+export async function getWeakestOpeningPhases({ userId, limit = 2, minMoves = 20 }) {
+  const res = await pgPool.query(WEAKEST_OPENING_PHASES_SQL, [userId, minMoves, limit]);
+  return res.rows;
+}
+
+export async function getWeakestMotifs({ userId, limit = 3 }) {
+  const res = await pgPool.query(WEAKEST_MOTIFS_SQL, [userId, limit]);
   return res.rows;
 }
 
@@ -305,6 +304,14 @@ export const analyticsRepo = {
   getMotifs,
   getWeakestOpeningPhases,
   getWeakestMotifs,
+  OPENINGS_SQL,
+  PHASES_SQL,
+  TIME_PRESSURE_COUNT_SQL,
+  TIME_PRESSURE_BUCKETS_SQL,
+  TREND_SQL,
+  MOTIFS_SQL,
+  WEAKEST_OPENING_PHASES_SQL,
+  WEAKEST_MOTIFS_SQL,
 };
 
 export default analyticsRepo;

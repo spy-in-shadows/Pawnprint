@@ -1,0 +1,58 @@
+Sort  (cost=59881.79..59906.75 rows=9986 width=64) (actual time=127.232..128.742 rows=8 loops=1)
+  Sort Key: (to_char((((date_trunc('day'::text, g.played_at))::date))::timestamp with time zone, 'YYYY-MM-DD'::text))
+  Sort Method: quicksort  Memory: 25kB
+  Buffers: shared hit=9090, temp read=854 written=856
+  ->  WindowAgg  (cost=32812.61..59218.43 rows=9986 width=64) (actual time=105.644..128.737 rows=8 loops=1)
+        Buffers: shared hit=9090, temp read=854 written=856
+        ->  GroupAggregate  (cost=32812.61..58943.82 rows=9986 width=24) (actual time=101.303..128.641 rows=8 loops=1)
+              Group Key: ((date_trunc('day'::text, g.played_at))::date)
+              Buffers: shared hit=9090, temp read=854 written=856
+              ->  Gather Merge  (cost=32812.61..55529.57 rows=199323 width=48) (actual time=97.801..113.548 rows=200000 loops=1)
+                    Workers Planned: 1
+                    Workers Launched: 1
+                    Buffers: shared hit=9090, temp read=854 written=856
+                    ->  Sort  (cost=31812.60..32105.72 rows=117249 width=48) (actual time=95.525..98.954 rows=100000 loops=2)
+                          Sort Key: ((date_trunc('day'::text, g.played_at))::date), g.id
+                          Sort Method: external merge  Disk: 3416kB
+                          Buffers: shared hit=9090, temp read=854 written=856
+                          Worker 0:  Sort Method: external merge  Disk: 3416kB
+                          ->  Hash Left Join  (cost=11568.04..18332.19 rows=117249 width=48) (actual time=41.967..82.605 rows=100000 loops=2)
+                                Hash Cond: (mc.classification_id = c.id)
+                                Buffers: shared hit=9046
+                                ->  Parallel Hash Right Join  (cost=11529.47..17398.57 rows=117249 width=24) (actual time=41.950..71.148 rows=100000 loops=2)
+                                      Hash Cond: (mc.move_id = m.id)
+                                      Buffers: shared hit=9044
+                                      ->  Parallel Seq Scan on move_classifications mc  (cost=0.00..4515.97 rows=235297 width=12) (actual time=0.003..6.052 rows=200002 loops=2)
+                                            Buffers: shared hit=2163
+                                      ->  Parallel Hash  (cost=10529.08..10529.08 rows=80031 width=16) (actual time=41.549..41.551 rows=100000 loops=2)
+                                            Buckets: 262144  Batches: 1  Memory Usage: 13056kB
+                                            Buffers: shared hit=6834
+                                            ->  Hash Join  (cost=699.13..10529.08 rows=80031 width=16) (actual time=2.196..30.756 rows=100000 loops=2)
+                                                  Hash Cond: ((m.game_id = g.id) AND (m.mover_color = g.color))
+                                                  Buffers: shared hit=6834
+                                                  ->  Parallel Seq Scan on moves m  (cost=0.00..7825.08 rows=160608 width=14) (actual time=0.007..7.747 rows=200010 loops=2)
+                                                        Buffers: shared hit=6219
+                                                  ->  Hash  (cost=549.34..549.34 rows=9986 width=18) (actual time=2.165..2.166 rows=10000 loops=2)
+                                                        Buckets: 16384  Batches: 1  Memory Usage: 617kB
+                                                        Buffers: shared hit=598
+                                                        ->  Nested Loop  (cost=0.00..549.34 rows=9986 width=18) (actual time=0.153..1.436 rows=10000 loops=2)
+                                                              Buffers: shared hit=598
+                                                              ->  Seq Scan on player_accounts pa  (cost=0.00..2.24 rows=1 width=4) (actual time=0.008..0.009 rows=1 loops=2)
+                                                                    Filter: ((id = 4170) AND (user_id = 3006))
+                                                                    Rows Removed by Filter: 15
+                                                                    Buffers: shared hit=4
+                                                              ->  Seq Scan on games g  (cost=0.00..447.24 rows=9986 width=22) (actual time=0.145..0.972 rows=10000 loops=2)
+                                                                    Filter: ((player_account_id = 4170) AND (analysis_status = 'analyzed'::text))
+                                                                    Rows Removed by Filter: 16
+                                                                    Buffers: shared hit=594
+                                ->  Hash  (cost=22.70..22.70 rows=1270 width=36) (actual time=0.007..0.008 rows=5 loops=2)
+                                      Buckets: 2048  Batches: 1  Memory Usage: 17kB
+                                      Buffers: shared hit=2
+                                      ->  Seq Scan on classifications c  (cost=0.00..22.70 rows=1270 width=36) (actual time=0.006..0.006 rows=5 loops=2)
+                                            Buffers: shared hit=2
+Planning:
+  Buffers: shared hit=35
+Planning Time: 0.261 ms
+Execution Time: 129.069 ms
+
+Summary: Execution Time = 129.069 ms

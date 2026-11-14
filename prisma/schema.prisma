@@ -40,6 +40,8 @@ model PlayerAccount {
   games        Game[]
   analysisJobs AnalysisJob[]
 
+  // Justified by explain plans on player_accounts filtering by user_id
+  @@index([userId], map: "idx_player_accounts_user_id")
   @@unique([platformId, username])
   @@map("player_accounts")
 }
@@ -209,6 +211,8 @@ model MoveMotif {
   move  Move  @relation(fields: [moveId], references: [id], onDelete: Cascade)
   motif Motif @relation(fields: [motifId], references: [id])
 
+  // Justified by explain plan 5_motif_weaknesses filtering and joining by motif_id
+  @@index([motifId], map: "idx_move_motifs_motif_id")
   @@id([moveId, motifId, kind])
   @@map("move_motifs")
 }
