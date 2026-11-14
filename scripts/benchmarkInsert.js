@@ -62,6 +62,7 @@ export function parseCliArgs(argv = process.argv.slice(2)) {
     strategy: 'all',
     rowSample: 500,
     keep: false,
+    out: null,
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -90,6 +91,11 @@ export function parseCliArgs(argv = process.argv.slice(2)) {
       }
     } else if (arg === '--keep') {
       args.keep = true;
+    } else if (arg === '--out') {
+      args.out = argv[++i];
+      if (!args.out) {
+        throw new Error('--out requires a file path');
+      }
     } else {
       throw new Error(`Unknown argument: ${arg}`);
     }
@@ -477,6 +483,26 @@ export function formatMarkdownTable(results) {
 
 export function formatReportMarkdown(machine, results) {
   const table = formatMarkdownTable(results);
+  const baseline = results.find((r) => r.strategy === 'prisma-row') ?? results[0];
+  const baselineRate = baseline?.movesPerSec || 1;
+
+  const createManyRes = results.find((r) => r.strategy === 'prisma-many');
+  const unnestRes = results.find((r) => r.strategy === 'unnest');
+
+  const createManySpeedup = createManyRes
+    ? `${(createManyRes.movesPerSec / baselineRate).toFixed(1)}x`
+    : null;
+  const unnestSpeedup = unnestRes
+    ? `${(unnestRes.movesPerSec / baselineRate).toFixed(1)}x`
+    : null;
+
+  const createManyNote = createManySpeedup
+    ? `, bringing moves/sec up by ${createManySpeedup} compared to per-row`
+    : '';
+  const unnestNote = unnestSpeedup
+    ? `, achieving ${unnestSpeedup} speedup over the per-row baseline`
+    : ', achieving maximum ingestion throughput';
+
   return `# Game Ingestion and Move Insertion Benchmark
 
 ## Environment
@@ -491,8 +517,8 @@ ${table}
 
 ## Analysis
 - **Write Amplification in Per-Row ORM**: Inserting each move as an isolated row (\`prisma.move.create\`) produces significant network overhead and transaction commit overhead (one round trip and WAL flush per ply).
-- **Prisma createMany**: Batching moves into a single \`createMany\` per game eliminates ply-level round trips, bringing moves/sec up by ~2x, but remains bounded by client-side query generation and parameters limit.
-- **PostgreSQL UNNEST**: In \`insertGameWithMoves\`, moves are passed as parallel typed arrays to an \`INSERT INTO moves ... SELECT ... FROM UNNEST(...)\` statement within a single transaction. This completes in a single network round trip and single WAL flush per game, achieving maximum ingestion throughput.
+- **Prisma createMany**: Batching moves into a single \`createMany\` per game eliminates ply-level round trips${createManyNote}, but remains bounded by client-side query generation and parameters limit.
+- **PostgreSQL UNNEST**: In \`insertGameWithMoves\`, moves are passed as parallel typed arrays to an \`INSERT INTO moves ... SELECT ... FROM UNNEST(...)\` statement within a single transaction. This completes in a single network round trip and single WAL flush per game${unnestNote}.
 `;
 }
 
@@ -553,10 +579,17 @@ export async function runBenchmark(cliOptions = {}) {
     console.log(tableMarkdown);
     console.log('');
 
-    const docContent = formatReportMarkdown(machine, results);
-    const benchmarkDir = path.join(ROOT_DIR, 'docs', 'benchmarks');
-    await fs.mkdir(benchmarkDir, { recursive: true });
-    await fs.writeFile(path.join(benchmarkDir, 'insert.md'), docContent, 'utf8');
+    const targetOut =
+      options.out ||
+      (options.strategy === 'all'
+        ? path.join(ROOT_DIR, 'docs', 'benchmarks', 'insert.md')
+        : null);
+
+    if (targetOut) {
+      const docContent = formatReportMarkdown(machine, results);
+      await fs.mkdir(path.dirname(targetOut), { recursive: true });
+      await fs.writeFile(targetOut, docContent, 'utf8');
+    }
 
     return { results, machine, tableMarkdown };
   } finally {

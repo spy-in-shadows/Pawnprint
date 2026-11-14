@@ -40,11 +40,11 @@ We evaluated move insertion throughput across three ingestion strategies on Appl
 #### Comparative Benchmark (1,000 Games / 40,000 Plies)
 | Strategy | Games | Plies / Game | Total Plies | Duration | Moves / sec | Speedup |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| Prisma create (per-row) | 1,000 | 40 | 40,000 | 41.55s * | 963 | 1.0x (baseline) |
-| Prisma createMany | 1,000 | 40 | 40,000 | 5.09s | 7,851 | 8.2x |
-| pg UNNEST (insertGameWithMoves) | 1,000 | 40 | 40,000 | 3.22s | 12,405 | 12.9x |
+| Prisma create (per-row) | 1,000 | 40 | 40,000 | 25.21s * | 1,587 | 1.0x (baseline) |
+| Prisma createMany | 1,000 | 40 | 40,000 | 3.92s | 10,203 | 6.4x |
+| pg UNNEST (insertGameWithMoves) | 1,000 | 40 | 40,000 | 3.07s | 13,033 | 8.2x |
 
-\* Extrapolated from 500-game sample (20.77s).
+\* Extrapolated from 500-game sample (12.61s).
 
 #### Scale Validation (10,000 Games / 400,000 Plies)
 We executed the full scale ingestion run using the `unnest` strategy across 10,000 games (400,000 plies):
@@ -54,9 +54,9 @@ We executed the full scale ingestion run using the `unnest` strategy across 10,0
 - **Throughput**: 7,559 moves/sec
 
 #### Key Takeaways
-- Per-row ORM creates suffer heavy latency penalties due to per-ply connection round trips and transaction overhead (~963 moves/sec).
-- Prisma `createMany` achieves an 8.2x improvement (~7,851 moves/sec) by batching moves per game, but incurs overhead in parameter preparation.
-- PostgreSQL `UNNEST` delivers peak throughput (~12,405 moves/sec on 1,000 games, 12.9x faster than per-row) while preserving transactional atomicity and idempotency.
+- Per-row ORM creates suffer heavy latency penalties due to per-ply connection round trips and transaction overhead (~1,587 moves/sec).
+- Prisma `createMany` achieves a 6.4x improvement (~10,203 moves/sec) by batching moves per game, but incurs overhead in parameter preparation.
+- PostgreSQL `UNNEST` delivers peak throughput (~13,033 moves/sec on 1,000 games, 8.2x faster than per-row) while preserving transactional atomicity and idempotency.
 
 ## 4. Pipeline and throughput
 TODO(B)
