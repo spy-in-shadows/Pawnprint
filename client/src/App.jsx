@@ -5,8 +5,8 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { LoginView } from './pages/LoginView';
 import { RegisterView } from './pages/RegisterView';
 import { ImportView } from './pages/ImportView';
+import { DashboardView } from './pages/DashboardView';
 import {
-  DashboardPage,
   GamesPage,
   GameDetailPage,
   TrainingPage,
@@ -23,7 +23,7 @@ export function App() {
           path="dashboard"
           element={
             <ProtectedRoute>
-              <DashboardPage />
+              <DashboardView />
             </ProtectedRoute>
           }
         />
