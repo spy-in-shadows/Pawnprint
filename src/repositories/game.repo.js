@@ -112,6 +112,7 @@ export async function list({
       opponentRating: game.opponentRating,
       totalPlies: game.totalPlies,
       analysisStatus: game.analysisStatus,
+      failureReason: game.failureReason,
       blunders,
       accuracyPct,
     };
