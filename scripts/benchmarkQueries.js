@@ -5,6 +5,9 @@ import { performance } from 'node:perf_hooks';
 import { prisma, pgPool, closeDb } from '../src/config/db.js';
 import { getMachineInfo } from './benchmarkInsert.js';
 import { refreshAccountSummary } from '../src/services/summary.service.js';
+import { saveGameAnalysis } from '../src/repositories/moveBulk.repo.js';
+import { registerEngineVersion } from '../src/workers/engineRegistry.js';
+import { evaluateMoveQuality } from '../src/chess/evalMath.js';
 import {
   OPENINGS_SQL,
   PHASES_SQL,
@@ -20,6 +23,12 @@ const ROOT_DIR = path.resolve(__dirname, '..');
 
 const WARMUP_RUNS = 3;
 const MEASURED_RUNS = 20;
+const SYNTHETIC_SEED = 20261115;
+const SYNTHETIC_MOTIFS = ['hanging_piece', 'fork', 'pin', 'skewer', 'back_rank', 'discovered_attack'];
+// Labels the rows written by --synthetic-analysis so they can never be mistaken for engine output.
+const SYNTHETIC_ENGINE = { engineName: 'synthetic-benchmark', engineVersion: '1', depth: 1, threads: 1, hashSize: 1 };
+
+const formatCount = (n) => n.toLocaleString('en-US');
 
 function percentile(sorted, p) {
   if (sorted.length === 0) return 0;
@@ -31,6 +40,7 @@ export function parseCliArgs(argv = process.argv.slice(2)) {
   const args = {
     accountId: null,
     out: null,
+    syntheticAnalysis: false,
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -41,6 +51,8 @@ export function parseCliArgs(argv = process.argv.slice(2)) {
     } else if (arg === '--out' && i + 1 < argv.length) {
       args.out = argv[i + 1];
       i += 1;
+    } else if (arg === '--synthetic-analysis') {
+      args.syntheticAnalysis = true;
     } else if (arg === '--help' || arg === '-h') {
       console.log(`
 Usage: node scripts/benchmarkQueries.js [options]
@@ -48,10 +60,15 @@ Usage: node scripts/benchmarkQueries.js [options]
 Options:
   --account <id>  Target player account ID (defaults to detecting benchmark account)
   --out <path>    Custom output markdown path (defaults to docs/benchmarks/queries.md)
+  --synthetic-analysis
+                  First store deterministic analysis rows (evals, classifications, motifs)
+                  for the account's pending games, so the analytics queries have data.
+                  The rows are tied to an engine_versions row named 'synthetic-benchmark'.
   --help, -h      Show this help message
 
 To generate the required 10k-game dataset:
   node scripts/benchmarkInsert.js --games 10000 --strategy unnest --keep
+  node scripts/benchmarkQueries.js --synthetic-analysis
 `);
       process.exit(0);
     }
@@ -117,6 +134,88 @@ export async function measureQuery(clientOrPool, queryText, params) {
   return { median, p95, samples: times };
 }
 
+// Deterministic PRNG (mulberry32) so every run produces the same dataset.
+function createRng(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// Builds saveGameAnalysis rows for one game: a random walk of White-perspective evals, classified
+// with the real evalMath rules, and one motif tag on every mistake or blunder.
+export function buildSyntheticRows(moves, rng) {
+  let before = 20;
+  let motifIndex = 0;
+  return moves.map((move) => {
+    const swing = Math.round((rng() - 0.5) * 120 + (rng() < 0.06 ? (rng() - 0.5) * 900 : 0));
+    const after = Math.max(-2000, Math.min(2000, before + swing));
+    const { cpLoss, classification } = evaluateMoveQuality({
+      evalBeforeCp: before,
+      evalAfterCp: after,
+      moverColor: move.mover_color,
+    });
+    const motifs = [];
+    if (classification === 'mistake' || classification === 'blunder') {
+      motifs.push({
+        name: SYNTHETIC_MOTIFS[motifIndex % SYNTHETIC_MOTIFS.length],
+        kind: motifIndex % 2 === 0 ? 'allowed' : 'missed',
+      });
+      motifIndex += 1;
+    }
+    const row = {
+      ply: move.ply,
+      evalBeforeCp: before,
+      evalAfterCp: after,
+      bestUci: move.uci,
+      depth: SYNTHETIC_ENGINE.depth,
+      mateBefore: null,
+      mateAfter: null,
+      cpLoss,
+      classification,
+      motifs,
+    };
+    before = after;
+    return row;
+  });
+}
+
+export async function addSyntheticAnalysis(account) {
+  const engineVersionId = await registerEngineVersion(SYNTHETIC_ENGINE);
+  const { rows: games } = await pgPool.query(
+    `SELECT id FROM games WHERE player_account_id = $1 AND analysis_status = 'pending' ORDER BY id`,
+    [account.id],
+  );
+  const rng = createRng(SYNTHETIC_SEED);
+  for (const { id } of games) {
+    const { rows: moves } = await pgPool.query(
+      'SELECT ply, uci, mover_color FROM moves WHERE game_id = $1 ORDER BY ply',
+      [id],
+    );
+    await saveGameAnalysis({ gameId: id, engineVersionId, moves: buildSyntheticRows(moves, rng) });
+  }
+  console.log(`Stored synthetic analysis for ${formatCount(games.length)} games.`);
+}
+
+function describeResults(results, refreshDurationMs) {
+  const queryResults = results.filter((r) => !r.name.startsWith('7.'));
+  const speedups = queryResults.map((r) => r.without.median / r.with.median);
+  const low = Math.min(...speedups).toFixed(2);
+  const high = Math.max(...speedups).toFixed(2);
+  const summary = results.find((r) => r.name.startsWith('7.'));
+  const summarySpeedup = summary ? (summary.without.median / summary.with.median).toFixed(1) : 'n/a';
+  const indexLine = Math.max(...speedups) < 1.2
+    ? `made no measurable difference on this dataset (p50 ratio ${low}x to ${high}x); the planner still prefers sequential scans at this size.`
+    : `changed p50 latency by ${low}x to ${high}x across the analytics queries.`;
+  return `1. **Targeted indexes**: \`idx_player_accounts_user_id\` and \`idx_move_motifs_motif_id\` ${indexLine}
+2. **Summary tables**: reading \`account_summary\` and \`account_phase_summary\` is ${summarySpeedup}x faster at p50 than the equivalent aggregate over the base tables.
+3. **Rollup cost**: \`refreshAccountSummary\` took ${refreshDurationMs.toFixed(0)} ms for this account; the worker pays it once at the end of each completed job.`;
+}
+
 export function formatQueryBenchmarkMarkdown({ machine, account, dataSize, results, refreshDurationMs }) {
   const headers = [
     'Query / Workload',
@@ -155,23 +254,25 @@ export function formatQueryBenchmarkMarkdown({ machine, account, dataSize, resul
 - **OS**: ${machine.os}
 
 ## Dataset
+Produced by \`node scripts/benchmarkInsert.js --games 10000 --strategy unnest --keep\` followed by \`node scripts/benchmarkQueries.js --synthetic-analysis\`: evaluations, classifications and motif tags are synthetic (seeded, classified with \`src/chess/evalMath.js\`), not engine output.
+
 - **Account**: \`${account.username}\` (ID: ${account.id}, User ID: ${account.userId})
-- **Games**: ${dataSize.games.toLocaleString()} games (${dataSize.analyzedGames.toLocaleString()} analyzed)
-- **Moves**: ${dataSize.moves.toLocaleString()} plies (${dataSize.analyzedMoves.toLocaleString()} owner plies in analyzed games)
-- **Move Motifs**: ${dataSize.motifs.toLocaleString()} tags
+- **Games**: ${formatCount(dataSize.games)} games (${formatCount(dataSize.analyzedGames)} analyzed)
+- **Moves**: ${formatCount(dataSize.moves)} plies (${formatCount(dataSize.analyzedMoves)} owner plies in analyzed games)
+- **Move Motifs**: ${formatCount(dataSize.motifs)} tags
 
 ## Benchmark Results (Warmup: ${WARMUP_RUNS}, Measured: ${MEASURED_RUNS} runs)
 
 ${tableLines}
 
+Row 7 compares the equivalent aggregate over the base tables (left column) with the summary-table read (right column).
+
 ### Account Summary Rollup Refresh
 - **\`refreshAccountSummary\` Execution Time**: ${refreshDurationMs.toFixed(2)} ms
-- **Scope**: Atomic transactional recomputation and upsert of \`account_summary\` and \`account_phase_summary\` across all ${dataSize.analyzedGames.toLocaleString()} analyzed games.
+- **Scope**: Atomic transactional recomputation and upsert of \`account_summary\` and \`account_phase_summary\` across all ${formatCount(dataSize.analyzedGames)} analyzed games.
 
 ## Analysis and Findings
-1. **Targeted Index Benefits**: Queries filtering on user accounts and tactical motifs benefit from the targeted indexes (\`idx_player_accounts_user_id\` and \`idx_move_motifs_motif_id\`), preventing table sequential scans as the user base and move motif history scale.
-2. **Summary Table Speedup**: Reading the precomputed \`account_summary\` and \`account_phase_summary\` tables achieves sub-millisecond response times, delivering orders-of-magnitude acceleration compared to full multi-table aggregation across hundreds of thousands of moves.
-3. **Rollup Trade-off**: The summary rollup requires ~${refreshDurationMs.toFixed(0)} ms of asynchronous recomputation per account job completion, decoupling heavy dashboard reads from active analytical ingestion.
+${describeResults(results, refreshDurationMs)}
 `;
 }
 
@@ -183,6 +284,7 @@ export async function runQueryBenchmark(cliOptions = {}) {
 
   const account = await detectBenchmarkAccount(options.accountId);
   const machine = await getMachineInfo();
+  if (options.syntheticAnalysis) await addSyntheticAnalysis(account);
 
   // Gather dataset size metrics
   const gamesCount = await prisma.game.count({ where: { playerAccountId: account.id } });
@@ -212,6 +314,12 @@ export async function runQueryBenchmark(cliOptions = {}) {
     analyzedMoves: analyzedMovesRes.rows[0]?.count ?? 0,
     motifs: motifsCount,
   };
+  // The analytics queries only read analyzed games; timing them over none measures nothing.
+  if (dataSize.analyzedGames === 0) {
+    throw new Error(
+      `Account ${account.id} has no analyzed games. Run again with --synthetic-analysis, or analyze its games with a worker first.`,
+    );
+  }
 
   console.log(`\n--- Running Analytics Query Benchmark on Account ${account.id} (${account.username}) ---`);
   console.log(`Dataset: ${dataSize.games} games, ${dataSize.moves} moves, ${dataSize.motifs} motifs`);
