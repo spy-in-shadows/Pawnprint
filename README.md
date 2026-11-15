@@ -158,21 +158,21 @@ Analysis throughput over 30 games (1,200 plies) with Stockfish 19 at depth 12 (`
 | 3 | 30 | 1,200 | 12.6 s | 142.9 | 95.2 | 40.10 | 2.81x | 0 |
 
 ### 3. Analytics Queries and Summary Rollup Acceleration
-Query performance measured across 20 iterations (warmup 3) against 10,000 games (400,000 moves, 40,000 motif tags):
+Query performance measured across 20 iterations (warmup 3) against 10,000 games (400,000 moves, 7,742 motif tags; reproduce with `benchmarkInsert.js --games 10000 --strategy unnest --keep` then `benchmarkQueries.js --synthetic-analysis`):
 
 | Query / Workload | Without C6 Indexes (p50 / p95) | With C6 Indexes (p50 / p95) | Speedup |
 | :--- | :---: | :---: | :---: |
-| 1. Opening Blunder Rate | 69.64 ms / 73.85 ms | 69.32 ms / 71.18 ms | 1.00x |
-| 2. Phase Accuracy | 64.93 ms / 65.47 ms | 64.76 ms / 66.24 ms | 1.00x |
-| 3. Time Pressure Buckets | 70.61 ms / 77.02 ms | 69.84 ms / 70.55 ms | 1.01x |
-| 4. Performance Trend (Rolling 7d) | 91.23 ms / 92.65 ms | 92.47 ms / 98.11 ms | 0.99x |
-| 5. Motif Weakness Frequency | 34.25 ms / 34.99 ms | 34.20 ms / 34.55 ms | 1.00x |
-| 6. Weakest Opening Phases | 194.83 ms / 197.57 ms | 194.13 ms / 196.49 ms | 1.00x |
+| 1. Opening Blunder Rate | 70.17 ms / 74.39 ms | 71.10 ms / 72.21 ms | 0.99x |
+| 2. Phase Accuracy | 66.32 ms / 67.94 ms | 66.83 ms / 67.66 ms | 0.99x |
+| 3. Time Pressure Buckets | 70.06 ms / 70.80 ms | 70.48 ms / 71.36 ms | 0.99x |
+| 4. Performance Trend (Rolling 7d) | 85.52 ms / 91.71 ms | 85.63 ms / 86.76 ms | 1.00x |
+| 5. Motif Weakness Frequency | 26.88 ms / 28.13 ms | 26.89 ms / 27.69 ms | 1.00x |
+| 6. Weakest Opening Phases | 199.91 ms / 204.22 ms | 197.46 ms / 200.29 ms | 1.01x |
 
 #### Summary Rollup vs Base Table Aggregation
 | Base aggregation (p50 / p95) | Summary table (p50 / p95) | Speedup |
 | :---: | :---: | :---: |
-| 242.25 ms / 247.96 ms | 0.34 ms / 0.43 ms | 710.94x |
+| 242.35 ms / 244.45 ms | 0.29 ms / 0.58 ms | 833.18x |
 
 ## API Endpoints
 

@@ -119,29 +119,29 @@ We executed the full scale ingestion run using the `unnest` strategy across 10,0
 Longitudinal chess analytics span multi-table aggregations across games, plies, engine evaluations, accuracy classifications, and tactical motifs. The API surfaces diagnostic endpoints for opening blunder rates, phase accuracies, time pressure decay, rolling 7-day performance trends, motif weakness frequencies, and personalized weak spots.
 
 ### Query Performance and Rollup Benchmark
-Benchmark measured across 20 iterations (3 warm-up runs) against a 10,000-game dataset (400,000 moves, 40,000 motif tags; note the earlier explain analysis in `docs/explain/` ran against an 80,003-tag dataset from an earlier unnest run) on Apple M4 (10 cores), 16 GB RAM, PostgreSQL 16.15:
+Benchmark measured across 20 iterations (3 warm-up runs) against a 10,000-game dataset (400,000 moves, 7,742 motif tags) on Apple M4 (10 cores), 16 GB RAM, PostgreSQL 16.15. The dataset is reproducible: `node scripts/benchmarkInsert.js --games 10000 --strategy unnest --keep`, then `node scripts/benchmarkQueries.js --synthetic-analysis`, which stores seeded synthetic evaluations (classified with the real eval maths) because these queries read only analyzed games. The plans in `docs/explain/` were captured earlier on a comparable 10,000-game dataset with 80,003 motif tags.
 
 #### Analytics Queries (Without vs With C6 Indexes)
 
 | Query / Workload | Without C6 Indexes (p50 / p95) | With C6 Indexes (p50 / p95) | Speedup (p50) |
 | :--- | :---: | :---: | :---: |
-| 1. Opening Blunder Rate | 69.64 ms / 73.85 ms | 69.32 ms / 71.18 ms | 1.00x |
-| 2. Phase Accuracy | 64.93 ms / 65.47 ms | 64.76 ms / 66.24 ms | 1.00x |
-| 3. Time Pressure Buckets | 70.61 ms / 77.02 ms | 69.84 ms / 70.55 ms | 1.01x |
-| 4. Performance Trend (Rolling 7d) | 91.23 ms / 92.65 ms | 92.47 ms / 98.11 ms | 0.99x |
-| 5. Motif Weakness Frequency | 34.25 ms / 34.99 ms | 34.20 ms / 34.55 ms | 1.00x |
-| 6. Weakest Opening Phases | 194.83 ms / 197.57 ms | 194.13 ms / 196.49 ms | 1.00x |
+| 1. Opening Blunder Rate | 70.17 ms / 74.39 ms | 71.10 ms / 72.21 ms | 0.99x |
+| 2. Phase Accuracy | 66.32 ms / 67.94 ms | 66.83 ms / 67.66 ms | 0.99x |
+| 3. Time Pressure Buckets | 70.06 ms / 70.80 ms | 70.48 ms / 71.36 ms | 0.99x |
+| 4. Performance Trend (Rolling 7d) | 85.52 ms / 91.71 ms | 85.63 ms / 86.76 ms | 1.00x |
+| 5. Motif Weakness Frequency | 26.88 ms / 28.13 ms | 26.89 ms / 27.69 ms | 1.00x |
+| 6. Weakest Opening Phases | 199.91 ms / 204.22 ms | 197.46 ms / 200.29 ms | 1.01x |
 
 #### Summary Rollup vs Base Table Aggregation
 
 | Base aggregation (p50 / p95) | Summary table (p50 / p95) | Speedup |
 | :---: | :---: | :---: |
-| 242.25 ms / 247.96 ms | 0.34 ms / 0.43 ms | 710.94x |
+| 242.35 ms / 244.45 ms | 0.29 ms / 0.58 ms | 833.18x |
 
 ### Observations and Analysis
 - The targeted indexes (`idx_player_accounts_user_id` and `idx_move_motifs_motif_id`) made no measurable difference at this dataset size (0.99x-1.01x) because the tables are small enough for the planner to favor sequential scans; they remain as projections for multi-user scale.
-- Reading precomputed summary rollups via `GET /api/v1/analytics/summary` executes in 0.34 ms (p50), providing a 710x speedup over full multi-table aggregation across 400,000 moves.
-- `refreshAccountSummary` is a synchronous step at job completion that adds ~267 ms per job and moves aggregation cost off dashboard reads.
+- Reading precomputed summary rollups via `GET /api/v1/analytics/summary` executes in 0.29 ms (p50), about 800x faster than the full multi-table aggregation (242 ms); the ratio moves between runs because the summary read is sub-millisecond, so the absolute numbers are the stable result.
+- `refreshAccountSummary` is a synchronous step at job completion that adds ~263 ms per job on this 10,000-game account and moves aggregation cost off dashboard reads.
 
 ## 6. Demo and results
 
@@ -187,7 +187,7 @@ The live system demonstration (`docs/DEMO.md`) provides an 8-minute end-to-end w
 ### Key Numbers Summary
 - **Move Insertion Throughput**: 13,033 moves/sec via PostgreSQL `UNNEST` (8.2x faster than per-row ORM creates).
 - **Analysis Worker Throughput**: 142.9 games/min (95.2 plies/sec) across 3 parallel workers on Apple M4.
-- **Summary Table Speedup**: 0.34 ms summary query latency vs 242.25 ms base aggregation (710x speedup).
+- **Summary Table Speedup**: 0.29 ms summary query latency vs 242.35 ms base aggregation (about 800x).
 - **Engine Call Efficiency**: N+1 engine calls for an N-ply game (40.03 to 40.10 engine calls per 40-ply game).
 - **Automated Test Coverage**: 356 server tests (38 test suites) and 43 client unit tests (6 test suites) passing.
 
