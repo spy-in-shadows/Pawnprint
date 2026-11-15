@@ -449,11 +449,11 @@ export function formatMarkdownTable(results) {
 
     return [
       r.label,
-      r.games.toLocaleString(),
+      r.games.toLocaleString('en-US'),
       String(r.plies),
-      r.totalPlies.toLocaleString(),
+      r.totalPlies.toLocaleString('en-US'),
       durationLabel,
-      r.movesPerSec.toLocaleString(),
+      r.movesPerSec.toLocaleString('en-US'),
       speedupLabel,
     ];
   });
@@ -475,7 +475,7 @@ export function formatMarkdownTable(results) {
   if (hasEstimated) {
     const est = results.find((r) => r.isEstimated);
     tableLines.push('');
-    tableLines.push(`\\* Extrapolated from ${est.sampleCount.toLocaleString()}-game sample (${(est.sampleDurationMs / 1000).toFixed(2)}s).`);
+    tableLines.push(`\\* Extrapolated from ${est.sampleCount.toLocaleString('en-US')}-game sample (${(est.sampleDurationMs / 1000).toFixed(2)}s).`);
   }
 
   return tableLines.join('\n');
