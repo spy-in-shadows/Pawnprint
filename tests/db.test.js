@@ -74,6 +74,23 @@ describe('database config, connection pool and transaction helper', () => {
     expect(typeof count).toBe('number');
   });
 
+  // Prisma stores timestamp columns as UTC wall-clock time; pg must agree on any host time zone.
+  it('writes and reads timestamp columns as UTC whatever the host time zone', async () => {
+    const originalTz = process.env.TZ;
+    process.env.TZ = 'Asia/Kolkata';
+    try {
+      const instant = new Date(Date.UTC(2026, 0, 1, 12, 0, 0));
+      const written = await pgPool.query('SELECT $1::timestamp::text AS wall', [instant]);
+      expect(written.rows[0].wall).toBe('2026-01-01 12:00:00');
+
+      const read = await pgPool.query("SELECT '2026-01-01 12:00:00'::timestamp AS ts");
+      expect(read.rows[0].ts.getTime()).toBe(instant.getTime());
+    } finally {
+      if (originalTz === undefined) delete process.env.TZ;
+      else process.env.TZ = originalTz;
+    }
+  });
+
   it('closeDb is idempotent and handles multiple calls gracefully', async () => {
     await expect(closeDb()).resolves.not.toThrow();
     await expect(closeDb()).resolves.not.toThrow();
