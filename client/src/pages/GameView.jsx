@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Chessboard } from 'react-chessboard';
 import {
@@ -17,6 +17,7 @@ import {
   uciToSan,
   buildPlyFens,
   buildWinProbabilitySeries,
+  scrollTopToReveal,
 } from '../lib/gameViewerUtils';
 
 export function GameView() {
@@ -82,6 +83,28 @@ export function GameView() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [goToPrev, goToNext, goToFirst, goToLast]);
+
+  // Keep the selected move visible in the move list. Only the list scrolls, not the page.
+  const moveListRef = useRef(null);
+  useEffect(() => {
+    const list = moveListRef.current;
+    if (!list) return;
+    if (selectedPly === 0) {
+      list.scrollTop = 0;
+      return;
+    }
+    const item = list.querySelector(`[data-ply="${selectedPly}"]`);
+    if (!item) return;
+    const listRect = list.getBoundingClientRect();
+    const itemRect = item.getBoundingClientRect();
+    const next = scrollTopToReveal({
+      scrollTop: list.scrollTop,
+      viewHeight: list.clientHeight,
+      itemTop: itemRect.top - listRect.top + list.scrollTop,
+      itemHeight: itemRect.height,
+    });
+    if (next !== null) list.scrollTop = next;
+  }, [selectedPly, moves]);
 
   // Selected move details
   const selectedMove = selectedPly > 0 ? moves[selectedPly - 1] : null;
@@ -406,7 +429,7 @@ export function GameView() {
               Move List
             </h2>
 
-            <div className="max-h-72 overflow-y-auto space-y-1 pr-1 text-xs">
+            <div ref={moveListRef} className="max-h-72 overflow-y-auto space-y-1 pr-1 text-xs">
               {moves.reduce((acc, m, idx) => {
                 if (m.moverColor === 'white') {
                   acc.push([m]);
@@ -433,6 +456,7 @@ export function GameView() {
                       {whiteMove ? (
                         <button
                           type="button"
+                          data-ply={whiteMove.ply}
                           onClick={() => setSelectedPly(whiteMove.ply)}
                           className={`w-full text-left px-2 py-1 rounded flex items-center justify-between transition-colors ${
                             selectedPly === whiteMove.ply
@@ -467,6 +491,7 @@ export function GameView() {
                       {blackMove ? (
                         <button
                           type="button"
+                          data-ply={blackMove.ply}
                           onClick={() => setSelectedPly(blackMove.ply)}
                           className={`w-full text-left px-2 py-1 rounded flex items-center justify-between transition-colors ${
                             selectedPly === blackMove.ply

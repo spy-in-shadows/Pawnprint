@@ -169,3 +169,17 @@ export function buildWinProbabilitySeries(moves = []) {
 
   return series;
 }
+
+/**
+ * Returns the scrollTop that brings an item fully into view inside a scroll container,
+ * or null when it is already fully visible. All values are in pixels; itemTop is measured
+ * from the top of the container's scrollable content. When the item is taller than the
+ * view, its top edge is shown. Setting scrollTop on the container scrolls only the list,
+ * never the page.
+ */
+export function scrollTopToReveal({ scrollTop, viewHeight, itemTop, itemHeight }) {
+  const itemBottom = itemTop + itemHeight;
+  if (itemTop < scrollTop || itemHeight > viewHeight) return itemTop;
+  if (itemBottom > scrollTop + viewHeight) return itemBottom - viewHeight;
+  return null;
+}

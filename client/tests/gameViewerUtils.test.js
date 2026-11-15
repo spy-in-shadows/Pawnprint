@@ -5,6 +5,7 @@ import {
   uciToSan,
   buildPlyFens,
   buildWinProbabilitySeries,
+  scrollTopToReveal,
 } from '../src/lib/gameViewerUtils';
 
 describe('gameViewerUtils pure logic', () => {
@@ -124,5 +125,29 @@ describe('gameViewerUtils pure logic', () => {
       expect(series[3].symbol).toBe('?!');
       expect(series[3].winProbability).toBeLessThan(50);
     });
+  });
+});
+
+describe('scrollTopToReveal', () => {
+  const view = { scrollTop: 100, viewHeight: 200 };
+
+  it('returns null when the item is already fully visible', () => {
+    expect(scrollTopToReveal({ ...view, itemTop: 150, itemHeight: 24 })).toBeNull();
+    expect(scrollTopToReveal({ ...view, itemTop: 100, itemHeight: 24 })).toBeNull();
+    expect(scrollTopToReveal({ ...view, itemTop: 276, itemHeight: 24 })).toBeNull();
+  });
+
+  it('scrolls up so an item above the view sits at the top', () => {
+    expect(scrollTopToReveal({ ...view, itemTop: 40, itemHeight: 24 })).toBe(40);
+    expect(scrollTopToReveal({ ...view, itemTop: 90, itemHeight: 24 })).toBe(90);
+  });
+
+  it('scrolls down so an item below the view sits at the bottom', () => {
+    expect(scrollTopToReveal({ ...view, itemTop: 290, itemHeight: 24 })).toBe(114);
+    expect(scrollTopToReveal({ ...view, itemTop: 600, itemHeight: 24 })).toBe(424);
+  });
+
+  it('shows the top edge of an item taller than the view', () => {
+    expect(scrollTopToReveal({ ...view, itemTop: 150, itemHeight: 300 })).toBe(150);
   });
 });
