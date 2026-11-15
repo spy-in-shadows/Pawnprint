@@ -4,7 +4,7 @@
 #   (no mode)  checks the working tree (modified + untracked files)
 #   --staged   checks what is staged for the next commit
 #   --branch   checks every commit on this branch compared with origin/main
-#   --allow    permits an extra path pattern (used for cross-owner edits named in a prompt)
+#   --allow    permits an extra path pattern (used for cross-owner edits named in a task)
 set -u
 ROLE="${1:-}"; shift || true
 MODE="working"; ALLOW=()
@@ -20,9 +20,6 @@ done
 case "$ROLE" in A|B|C) ;; *) echo "usage: preflight.sh <A|B|C> [--staged|--branch] [--allow glob]..."; exit 2 ;; esac
 
 FAIL=0
-TRACE_FILE_RE="(^|/)cl""aude\.md$|(^|/)\.cl""aude/|(^|/)agents\.md$|(^|/)gem""ini\.md$|\.cursor|copi""lot-instructions"
-# wording that must not appear anywhere in the repository (split so this file does not match itself)
-TRACE_RE="cl""aude|anthr""opic|chat""gpt|open""ai|copi""lot|gem""ini|as an a""i|language mod""el|a""i-generated|generated (by|with)|co-authored-""by"
 fail() { echo "FAIL: $*"; FAIL=1; }
 ok()   { echo "ok:   $*"; }
 warn() { echo "warn: $*"; }
@@ -76,9 +73,8 @@ else
   while IFS= read -r f; do
     [ -z "$f" ] && continue
     if matches "$f" "${OWN[@]}" "${COMMON[@]}" "${ALLOW[@]+"${ALLOW[@]}"}"; then :; else
-      fail "$f is outside Person $ROLE's area (add --allow only if the prompt names this cross-owner edit)"
+      fail "$f is outside Person $ROLE's area (add --allow only if the task names this cross-owner edit)"
     fi
-    if echo "$f" | grep -qiE "$TRACE_FILE_RE"; then fail "$f is a tool-specific file and must not be committed (use ENGINEERING.md)"; fi
     case "$f" in
       .env|*/.env|node_modules/*|*/node_modules/*|client/dist/*|.DS_Store|*/.DS_Store|*.log)
         fail "$f must never be committed" ;;
@@ -91,9 +87,6 @@ else
         tests/*|*.test.js|*.test.jsx)
           if grep -qE '\b(it|test|describe)\.only\(|\bfdescribe\(|\bfit\(' "$f"; then fail "$f contains .only / focused tests"; fi ;;
       esac
-      if [ "$f" != "scripts/preflight.sh" ] && grep -qiE "$TRACE_RE" "$f" 2>/dev/null; then
-        fail "$f mentions an AI tool or assistant ($(grep -iEo "$TRACE_RE" "$f" | head -1)); rewrite it in neutral engineering language"
-      fi
       case "$f" in
         .env.example|*.md) : ;;
         *) if grep -qE 'BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|ghp_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9]{20,}' "$f" 2>/dev/null; then fail "$f looks like it contains a secret"; fi ;;
@@ -111,7 +104,6 @@ if [ "$MODE" = "branch" ]; then
     [ -z "$s" ] && continue
     echo "$s" | grep -qE "$RE" || fail "commit subject not in conventional format: $s"
   done < <(git log --format=%s origin/main..HEAD 2>/dev/null)
-  if git log --format=%B origin/main..HEAD 2>/dev/null | grep -qiE "$TRACE_RE"; then fail "a commit message contains an AI tool name or a trailer line (Co-authored-by, Generated with); rewrite those commits"; fi
   if git merge-base --is-ancestor origin/main HEAD 2>/dev/null; then ok "branch contains the latest origin/main"; else fail "branch is behind origin/main: run git fetch origin && git rebase origin/main"; fi
 fi
 

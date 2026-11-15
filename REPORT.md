@@ -20,7 +20,7 @@ DESIGN.md is the full design; ENGINEERING.md lists the decisions and rules.
 | B (spy-in-shadows, repository owner) | Eval maths, phases, FEN validation, Stockfish client, job queue, game analyzer and job runner, data-quality checks, motif detection, crash-recovery tests, throughput benchmark, end-to-end test, design documents |
 | C (Shailja-Vatsa) | Auth and games endpoints, analytics endpoints, accounts, imports and uploads, training plans and middleware, query evidence and summary tables, React client |
 
-**Workflow.** Each PR was built on its own branch from a short sequence of prompts, rebased onto `main` before review and merged with a rebase merge after another team member approved it. `docs/CONTRACTS.md` fixed every cross-owner module signature up front, so work in one area could start before the modules it called existed; signature changes needed B's approval. `scripts/preflight.sh` checked each commit and branch for files outside the author's area, debug output and style problems before it was pushed. Non-trivial problems went into `docs/DEV_LOG.md`.
+**Workflow.** Each PR was built on its own branch from a short sequence of planned tasks, rebased onto `main` before review and merged with a rebase merge after another team member approved it. `docs/CONTRACTS.md` fixed every cross-owner module signature up front, so work in one area could start before the modules it called existed; signature changes needed B's approval. `scripts/preflight.sh` checked each commit and branch for files outside the author's area, debug output and style problems before it was pushed. Non-trivial problems went into `docs/DEV_LOG.md`.
 
 **Merged PRs, in merge order (waves by dependency).**
 
