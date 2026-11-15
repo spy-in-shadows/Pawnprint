@@ -237,7 +237,7 @@ export function ImportView() {
               {getStatusBadge(activeJob.status)}
             </div>
             <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
-              {calculateProgress(activeJob.analyzed_games || activeJob.analyzedGames, activeJob.total_games || activeJob.totalGames)}%
+              {calculateProgress(activeJob.completedGames, activeJob.totalGames)}%
             </span>
           </div>
 
@@ -245,10 +245,7 @@ export function ImportView() {
             <div
               className="bg-indigo-600 h-2.5 rounded-full transition-all duration-300"
               style={{
-                width: `${calculateProgress(
-                  activeJob.analyzed_games || activeJob.analyzedGames,
-                  activeJob.total_games || activeJob.totalGames
-                )}%`,
+                width: `${calculateProgress(activeJob.completedGames, activeJob.totalGames)}%`,
               }}
             />
           </div>
@@ -257,19 +254,19 @@ export function ImportView() {
             <div>
               <span className="text-gray-500 dark:text-gray-400 block text-xs">Analyzed / Total</span>
               <span className="font-semibold text-gray-900 dark:text-gray-100">
-                {activeJob.analyzed_games ?? activeJob.analyzedGames ?? 0} / {activeJob.total_games ?? activeJob.totalGames ?? 0}
+                {activeJob.completedGames ?? 0} / {activeJob.totalGames ?? 0}
               </span>
             </div>
             <div>
               <span className="text-gray-500 dark:text-gray-400 block text-xs">Failed Games</span>
               <span className="font-semibold text-red-600 dark:text-red-400">
-                {activeJob.failed_games ?? activeJob.failedGames ?? 0}
+                {activeJob.failedGames ?? 0}
               </span>
             </div>
             <div>
               <span className="text-gray-500 dark:text-gray-400 block text-xs">Skipped Games</span>
               <span className="font-semibold text-gray-600 dark:text-gray-300">
-                {activeJob.skipped_games ?? activeJob.skippedGames ?? 0}
+                {activeJob.skippedGames ?? 0}
               </span>
             </div>
             <div>
