@@ -29,35 +29,27 @@ export function validateDateRange(from, to) {
   return { valid: true, error: null };
 }
 
+// The shaping helpers read the row shapes returned by src/repositories/analytics.repo.js.
+
 export function shapeOpeningsData(rows = []) {
   if (!Array.isArray(rows)) return [];
 
   const sorted = [...rows].sort((a, b) => (Number(b.moves) || 0) - (Number(a.moves) || 0));
-  const top10 = sorted.slice(0, 10);
 
-  return top10.map((item) => {
+  return sorted.slice(0, 10).map((item) => {
     const eco = item.eco || '???';
-    const name = item.opening_name || item.name || 'Unknown';
-    const plyBucket = item.ply_bucket || item.plyBucket || 'all';
-    const moves = Number(item.moves || 0);
-    const blunders = Number(item.blunders || 0);
-    const blundersPer100 = moves > 0
-      ? (item.blunders_per_100_moves !== undefined
-          ? Number(item.blunders_per_100_moves)
-          : Number(((blunders / moves) * 100).toFixed(2)))
-      : 0;
-    const avgCpLoss = Number(item.avg_cp_loss !== undefined ? item.avg_cp_loss : (item.avgCpLoss || 0));
-
+    const name = item.name || 'Unknown';
+    const plyBucket = item.plyBucket || 'all';
     return {
       eco,
       name,
       displayName: `${eco} ${name} (${plyBucket})`,
       shortName: `${eco} ${name}`,
       plyBucket,
-      moves,
-      blunders,
-      blundersPer100,
-      avgCpLoss,
+      moves: Number(item.moves || 0),
+      blunders: Number(item.blunders || 0),
+      blundersPer100: Number(item.blundersPer100 || 0),
+      avgCpLoss: Number(item.avgCpLoss || 0),
     };
   });
 }
@@ -66,60 +58,40 @@ export function shapePhasesData(rows = []) {
   if (!Array.isArray(rows)) return [];
 
   const phaseOrder = ['opening', 'middlegame', 'endgame'];
-  const map = new Map();
-
+  const byPhase = new Map();
   rows.forEach((r) => {
-    if (r && (r.phase || r.name)) {
-      const key = (r.phase || r.name).toLowerCase();
-      map.set(key, r);
-    }
+    if (r && r.phase) byPhase.set(r.phase.toLowerCase(), r);
   });
 
   return phaseOrder.map((phase) => {
-    const r = map.get(phase);
-    const moves = r ? Number(r.moves || r.total_moves || 0) : 0;
-    const accuracy = r ? Number(r.accuracy_pct !== undefined ? r.accuracy_pct : (r.accuracy || 0)) : 0;
-    const blunders = r ? Number(r.blunders || 0) : 0;
-    const avgCpLoss = r ? Number(r.avg_cp_loss !== undefined ? r.avg_cp_loss : (r.avgCpLoss || 0)) : 0;
-
+    const r = byPhase.get(phase) || {};
     return {
       phase: phase.charAt(0).toUpperCase() + phase.slice(1),
       phaseKey: phase,
-      moves,
-      accuracyPct: accuracy,
-      blunders,
-      avgCpLoss,
+      moves: Number(r.moves || 0),
+      accuracyPct: Number(r.accuracyPct || 0),
+      blunders: Number(r.blunders || 0),
+      avgCpLoss: Number(r.avgCpLoss || 0),
     };
   });
 }
 
 export function shapeTimePressureData(items = []) {
-  const map = new Map();
+  const byBucket = new Map();
   if (Array.isArray(items)) {
     items.forEach((item) => {
-      if (item && item.bucket) {
-        map.set(item.bucket, item);
-      }
+      if (item && item.bucket) byBucket.set(item.bucket, item);
     });
   }
 
   return TIME_PRESSURE_BUCKET_ORDER.map((bucket) => {
-    const existing = map.get(bucket);
-    const moves = existing ? Number(existing.moves || 0) : 0;
-    const blunders = existing ? Number(existing.blunders || 0) : 0;
-    const blundersPer100 = moves > 0
-      ? (existing.blunders_per_100_moves !== undefined
-          ? Number(existing.blunders_per_100_moves)
-          : Number(((blunders / moves) * 100).toFixed(2)))
-      : 0;
-    const avgCpLoss = existing ? Number(existing.avg_cp_loss !== undefined ? existing.avg_cp_loss : (existing.avgCpLoss || 0)) : 0;
-
+    const r = byBucket.get(bucket) || {};
     return {
       bucket,
-      moves,
-      blunders,
-      blundersPer100,
-      avgCpLoss,
+      moves: Number(r.moves || 0),
+      blunders: Number(r.blunders || 0),
+      blundersPer100: Number(r.blundersPer100 || 0),
+      avgCpLoss: Number(r.avgCpLoss || 0),
     };
   });
 }
@@ -127,22 +99,14 @@ export function shapeTimePressureData(items = []) {
 export function shapeTrendData(rows = []) {
   if (!Array.isArray(rows)) return [];
 
-  return rows.map((r) => {
-    const dateStr = r.game_date || r.date || '';
-    const date = dateStr ? new Date(dateStr).toISOString().slice(0, 10) : '';
-    const accuracyPct = Number(r.accuracy_pct !== undefined ? r.accuracy_pct : (r.accuracy || 0));
-    const rollingAccuracy = Number(r.rolling_accuracy_pct !== undefined ? r.rolling_accuracy_pct : (r.rolling_accuracy || accuracyPct));
-    const moves = Number(r.moves || 0);
-    const avgCpLoss = Number(r.avg_cp_loss !== undefined ? r.avg_cp_loss : (r.avgCpLoss || 0));
-
-    return {
-      date,
-      accuracyPct,
-      rollingAccuracy,
-      moves,
-      avgCpLoss,
-    };
-  });
+  // `day` is already a YYYY-MM-DD string in UTC; parsing it as a Date would shift it by the viewer's zone.
+  return rows.map((r) => ({
+    date: r.day || '',
+    games: Number(r.games || 0),
+    accuracyPct: Number(r.accuracyPct || 0),
+    rollingAccuracy: Number(r.rollingAccuracyPct || 0),
+    avgCpLoss: Number(r.avgCpLoss || 0),
+  }));
 }
 
 export function shapeMotifsData(rows = []) {
@@ -151,13 +115,12 @@ export function shapeMotifsData(rows = []) {
   const motifMap = new Map();
 
   rows.forEach((row) => {
-    if (!row || (!row.motif && !row.motif_name && !row.name)) return;
-    const motifName = row.motif || row.motif_name || row.name;
+    if (!row || !row.motif) return;
 
-    if (!motifMap.has(motifName)) {
-      motifMap.set(motifName, {
-        motif: motifName,
-        displayName: motifName.replace(/_/g, ' '),
+    if (!motifMap.has(row.motif)) {
+      motifMap.set(row.motif, {
+        motif: row.motif,
+        displayName: row.motif.replace(/_/g, ' '),
         allowed: 0,
         missed: 0,
         allowedCount: 0,
@@ -166,9 +129,9 @@ export function shapeMotifsData(rows = []) {
       });
     }
 
-    const entry = motifMap.get(motifName);
-    const rate = Number(row.errors_per_100_moves !== undefined ? row.errors_per_100_moves : (row.errorsPer100Moves || 0));
-    const count = Number(row.error_count !== undefined ? row.error_count : (row.errorCount || row.count || 0));
+    const entry = motifMap.get(row.motif);
+    const rate = Number(row.errorsPer100Moves || 0);
+    const count = Number(row.errorCount || 0);
 
     if (row.kind === 'allowed') {
       entry.allowed = rate;

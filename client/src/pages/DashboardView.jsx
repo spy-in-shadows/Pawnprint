@@ -592,7 +592,7 @@ export function DashboardView() {
             { key: 'date', label: 'Date' },
             { key: 'accuracyPct', label: 'Daily Accuracy %' },
             { key: 'rollingAccuracy', label: 'Rolling Accuracy %' },
-            { key: 'moves', label: 'Moves' },
+            { key: 'games', label: 'Games' },
           ]}
         >
           <ResponsiveContainer width="100%" height="100%">
@@ -622,7 +622,7 @@ export function DashboardView() {
                   color: '#f9fafb',
                 }}
                 formatter={(val, name, item) => [
-                  `${val}% (${item.payload.moves} moves on ${item.payload.date})`,
+                  `${val}% (${item.payload.games} games on ${item.payload.date})`,
                   name,
                 ]}
               />
