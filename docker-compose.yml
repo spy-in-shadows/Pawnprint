@@ -6,7 +6,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-chess}
       POSTGRES_DB: ${POSTGRES_DB:-chess_analytics}
     ports:
-      - "5432:5432"
+      # Override with POSTGRES_PORT when another Postgres already uses 5432 (then change DATABASE_URL too).
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
