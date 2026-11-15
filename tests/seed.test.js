@@ -35,7 +35,7 @@ describe('database seed script', () => {
     expect(countsAfterFirst.results).toBe(3);
     expect(countsAfterFirst.motifs).toBe(7);
     expect(countsAfterFirst.timeControls).toBe(11);
-    expect(countsAfterFirst.openings).toBeGreaterThanOrEqual(28);
+    expect(countsAfterFirst.openings).toBeGreaterThanOrEqual(490);
     // Seed must not create any engine_versions rows
     expect(countsAfterFirst.engineVersions).toBe(engineVersionsBefore);
 
@@ -118,5 +118,25 @@ describe('database seed script', () => {
       where: { eco_name: { eco: 'D35', name: "Queen's Gambit Declined" } },
     });
     expect(qgd).not.toBeNull();
+  });
+
+  it('seeds every ECO code from A00 to E99 exactly once', async () => {
+    await seed(prisma);
+
+    const expected = [];
+    for (const letter of ['A', 'B', 'C', 'D', 'E']) {
+      for (let n = 0; n < 100; n += 1) {
+        expected.push(`${letter}${String(n).padStart(2, '0')}`);
+      }
+    }
+
+    const rows = await prisma.opening.groupBy({ by: ['eco'], _count: { _all: true } });
+    const codes = rows.map((r) => r.eco);
+    for (const eco of expected) {
+      expect(codes).toContain(eco);
+    }
+
+    const duplicates = rows.filter((r) => r._count._all > 1).map((r) => r.eco);
+    expect(duplicates).toEqual([]);
   });
 });
