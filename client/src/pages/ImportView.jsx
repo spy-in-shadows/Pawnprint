@@ -34,6 +34,7 @@ export function ImportView() {
 
   // Active Job progress
   const [activeJob, setActiveJob] = useState(null);
+  const [pollError, setPollError] = useState(null);
   const pollTimerRef = useRef(null);
 
   const fetchAccounts = async () => {
@@ -69,11 +70,13 @@ export function ImportView() {
 
   const trackJob = (jobId) => {
     clearPolling();
+    setPollError(null);
     if (!jobId) return;
 
     const poll = async () => {
       try {
         const job = await api.get(`/imports/${jobId}`);
+        setPollError(null);
         setActiveJob(job);
         if (shouldStopPolling(job.status)) {
           clearPolling();
@@ -81,6 +84,7 @@ export function ImportView() {
         }
       } catch (err) {
         clearPolling();
+        setPollError(err.message || 'Could not load import progress');
       }
     };
 
@@ -281,6 +285,18 @@ export function ImportView() {
               </span>
             </div>
           </div>
+
+          {pollError && (
+            <div className="p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-300 flex justify-between items-center">
+              <span>Progress updates stopped: {pollError}</span>
+              <button
+                onClick={() => trackJob(activeJob.id)}
+                className="px-3 py-1 bg-red-100 dark:bg-red-800 rounded text-xs font-semibold hover:bg-red-200"
+              >
+                Retry
+              </button>
+            </div>
+          )}
 
           {(activeJob.status === 'failed' || activeJob.error) && (
             <div className="p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-300">
