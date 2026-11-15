@@ -1,3 +1,5 @@
+// Load .env here: the seed runs on its own, without src/config/env.js.
+import 'dotenv/config';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
