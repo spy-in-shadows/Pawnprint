@@ -23,6 +23,20 @@ import {
   shapeSummaryMetrics,
 } from '../lib/dashboardUtils';
 
+// Rotated y-axis title, centred on the axis and drawn inside the chart's left margin.
+// A zero or negative left margin puts half of the rotated text outside the SVG, where it is cut off.
+function yAxisLabel(value) {
+  return {
+    value,
+    angle: -90,
+    position: 'insideLeft',
+    offset: 0,
+    fontSize: 11,
+    fill: 'var(--chart-text)',
+    style: { textAnchor: 'middle' },
+  };
+}
+
 function ChartCard({
   title,
   subtitle,
@@ -431,7 +445,7 @@ export function DashboardView() {
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
               data={openingsState.data}
-              margin={{ top: 10, right: 20, left: -10, bottom: 40 }}
+              margin={{ top: 10, right: 20, left: 10, bottom: 40 }}
             >
               <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
               <XAxis
@@ -444,13 +458,7 @@ export function DashboardView() {
               />
               <YAxis
                 tick={{ fontSize: 11, fill: 'var(--chart-text)' }}
-                label={{
-                  value: 'Blunders / 100',
-                  angle: -90,
-                  position: 'insideLeft',
-                  fontSize: 11,
-                  fill: 'var(--chart-text)',
-                }}
+                label={yAxisLabel('Blunders / 100')}
               />
               <Tooltip
                 contentStyle={{
@@ -495,20 +503,14 @@ export function DashboardView() {
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
               data={phasesState.data}
-              margin={{ top: 10, right: 20, left: -10, bottom: 20 }}
+              margin={{ top: 10, right: 20, left: 10, bottom: 20 }}
             >
               <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
               <XAxis dataKey="phase" tick={{ fontSize: 12, fill: 'var(--chart-text)' }} />
               <YAxis
                 domain={[0, 100]}
                 tick={{ fontSize: 11, fill: 'var(--chart-text)' }}
-                label={{
-                  value: 'Accuracy %',
-                  angle: -90,
-                  position: 'insideLeft',
-                  fontSize: 11,
-                  fill: 'var(--chart-text)',
-                }}
+                label={yAxisLabel('Accuracy %')}
               />
               <Tooltip
                 contentStyle={{
@@ -547,19 +549,13 @@ export function DashboardView() {
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
               data={timePressureState.data}
-              margin={{ top: 10, right: 20, left: -10, bottom: 20 }}
+              margin={{ top: 10, right: 20, left: 10, bottom: 20 }}
             >
               <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
               <XAxis dataKey="bucket" tick={{ fontSize: 12, fill: 'var(--chart-text)' }} />
               <YAxis
                 tick={{ fontSize: 11, fill: 'var(--chart-text)' }}
-                label={{
-                  value: 'Blunders / 100',
-                  angle: -90,
-                  position: 'insideLeft',
-                  fontSize: 11,
-                  fill: 'var(--chart-text)',
-                }}
+                label={yAxisLabel('Blunders / 100')}
               />
               <Tooltip
                 contentStyle={{
@@ -598,20 +594,14 @@ export function DashboardView() {
           <ResponsiveContainer width="100%" height="100%">
             <LineChart
               data={trendState.data}
-              margin={{ top: 10, right: 20, left: -10, bottom: 20 }}
+              margin={{ top: 10, right: 20, left: 10, bottom: 20 }}
             >
               <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
               <XAxis dataKey="date" tick={{ fontSize: 11, fill: 'var(--chart-text)' }} />
               <YAxis
                 domain={[0, 100]}
                 tick={{ fontSize: 11, fill: 'var(--chart-text)' }}
-                label={{
-                  value: 'Accuracy %',
-                  angle: -90,
-                  position: 'insideLeft',
-                  fontSize: 11,
-                  fill: 'var(--chart-text)',
-                }}
+                label={yAxisLabel('Accuracy %')}
               />
               <Tooltip
                 contentStyle={{
@@ -667,7 +657,7 @@ export function DashboardView() {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={motifsState.data}
-                margin={{ top: 10, right: 20, left: 0, bottom: 40 }}
+                margin={{ top: 10, right: 20, left: 10, bottom: 40 }}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
                 <XAxis
@@ -680,13 +670,7 @@ export function DashboardView() {
                 />
                 <YAxis
                   tick={{ fontSize: 11, fill: 'var(--chart-text)' }}
-                  label={{
-                    value: 'Errors / 100 Moves',
-                    angle: -90,
-                    position: 'insideLeft',
-                    fontSize: 11,
-                    fill: 'var(--chart-text)',
-                  }}
+                  label={yAxisLabel('Errors / 100 Moves')}
                 />
                 <Tooltip
                   contentStyle={{
