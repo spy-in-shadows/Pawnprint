@@ -14,13 +14,13 @@ The system imports a player's games from Lichess, Chess.com or a PGN upload, eva
 DESIGN.md is the full design; ENGINEERING.md lists the decisions and rules.
 
 ## 2. Team and workflow
-| Person | Area |
+| Name | Area |
 |---|---|
-| A (07shlokjoshi) | Infrastructure and CI, config and logging, schema and seeds, PGN parser, bulk insert repository, platform clients and import service, insert benchmark, puzzle importer |
-| B (spy-in-shadows, repository owner) | Eval maths, phases, FEN validation, Stockfish client, job queue, game analyzer and job runner, data-quality checks, motif detection, crash-recovery tests, throughput benchmark, end-to-end test, design documents |
-| C (Shailja-Vatsa) | Auth and games endpoints, analytics endpoints, accounts, imports and uploads, training plans and middleware, query evidence and summary tables, React client |
+| Shlok Joshi (07shlokjoshi) | Infrastructure and CI, config and logging, schema and seeds, PGN parser, bulk insert repository, platform clients and import service, insert benchmark, puzzle importer |
+| Krishna Arun Verma (spy-in-shadows, repository owner) | Eval maths, phases, FEN validation, Stockfish client, job queue, game analyzer and job runner, data-quality checks, motif detection, crash-recovery tests, throughput benchmark, end-to-end test, design documents |
+| Shailja Vatsa (Shailja-Vatsa) | Auth and games endpoints, analytics endpoints, accounts, imports and uploads, training plans and middleware, query evidence and summary tables, React client |
 
-**Workflow.** Each PR was built on its own branch from a short sequence of planned tasks, rebased onto `main` before review and merged with a rebase merge after another team member approved it. `docs/CONTRACTS.md` fixed every cross-owner module signature up front, so work in one area could start before the modules it called existed; signature changes needed B's approval. `scripts/preflight.sh` checked each commit and branch for files outside the author's area, debug output and style problems before it was pushed. Non-trivial problems went into `docs/DEV_LOG.md`.
+**Workflow.** Each PR was built on its own branch from a short sequence of planned tasks, rebased onto `main` before review and merged with a rebase merge after another team member approved it. `docs/CONTRACTS.md` fixed every cross-owner module signature up front, so work in one area could start before the modules it called existed; signature changes needed Krishna Arun Verma's approval. `scripts/preflight.sh` checked each commit and branch for files outside the author's area, debug output and style problems before it was pushed. Non-trivial problems went into `docs/DEV_LOG.md`.
 
 **Merged PRs, in merge order (waves by dependency).**
 
@@ -45,7 +45,7 @@ DESIGN.md is the full design; ENGINEERING.md lists the decisions and rules.
 | | #17 | PR-C4: Query evidence, indexes, summary tables and query benchmark | 2026-11-14 |
 | 5. Verification | #18 | PR-B6: Crash-recovery tests, throughput benchmark and end-to-end test | 2026-11-14 |
 | | #19 | PR-C7: Dashboard, game viewer and training page | 2026-11-14 |
-| | #20 | PR-B7: Final audit Person B | 2026-11-15 |
+| | #20 | PR-B7: Final audit (Krishna Arun Verma) | 2026-11-15 |
 
 ## 3. Schema and insert benchmark
 
@@ -193,12 +193,12 @@ The live system demonstration (`docs/DEMO.md`) provides an 8-minute end-to-end w
 
 ## 7. Development log summary
 
-### Totals by Person
-| Person | Role | Logged Time (min) | Issues Handled |
+### Totals by Team Member
+| Name | Role | Logged Time (min) | Issues Handled |
 | :--- | :--- | :---: | :---: |
-| **A** (07shlokjoshi) | Ingestion & Infra | 10 min | 1 |
-| **B** (spy-in-shadows) | Engine & Pipeline | 151 min | 16 |
-| **C** (Shailja-Vatsa) | Analytics & Client | 0 min | 0 |
+| **Shlok Joshi** (07shlokjoshi) | Ingestion & Infra | 10 min | 1 |
+| **Krishna Arun Verma** (spy-in-shadows) | Engine & Pipeline | 151 min | 16 |
+| **Shailja Vatsa** (Shailja-Vatsa) | Analytics & Client | 0 min | 0 |
 | **Total** | | **161 min** | **17 non-trivial issues** |
 
 ### Totals by Cause
