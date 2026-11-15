@@ -124,7 +124,7 @@ This script walks through an end-to-end demonstration of the Longitudinal Chess 
    Highlight that `claim.concurrency.test.js` proves PostgreSQL `SKIP LOCKED` concurrency guarantees: three parallel workers race for 40 queued jobs with exactly 40 jobs claimed and zero double claims, plus single-job and stale-job races where exactly one worker claims the target job. In `crashRecovery.test.js`, worker process crash recovery automatically respawns Stockfish and resumes incomplete jobs without duplicate evaluation rows.
 3. **Performance Benchmarks**:
    - Show `docs/benchmarks/insert.md`: PostgreSQL `UNNEST` delivers an 8.2x speedup over per-row ORM creates.
-   - Show `docs/benchmarks/queries.md`: Precomputed summary tables deliver a 710x speedup for dashboard reads.
+   - Show `docs/benchmarks/queries.md`: Precomputed summary tables answer in about 0.3 ms instead of about 242 ms for the base-table aggregate.
 
 ---
 
