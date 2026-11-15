@@ -40,3 +40,11 @@ Usage:
 ```bash
 node scripts/dataQuality.js [--account <id>]
 ```
+
+## reclassifyOpenings.js
+Links games imported before the full ECO list was seeded to their opening. Games keep only `opening_id`, not the ECO header, so a plain SQL update cannot recover it and re-importing does not help either (imports skip games that already exist). The script reads the ECO header again for every Lichess game with no opening through the Lichess export-by-ids endpoint (headers only, 300 ids per request) and sets `opening_id` to the seeded row for that code. It only fills empty `opening_id` values, so it is safe to run more than once. Chess.com and uploaded games are counted but not changed. Run `npm run seed` first.
+
+Usage:
+```bash
+node scripts/reclassifyOpenings.js
+```

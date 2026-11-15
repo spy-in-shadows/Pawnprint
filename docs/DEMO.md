@@ -1,5 +1,7 @@
 # 8-Minute System Demo Script
 
+Opening names for all ECO codes (A00 to E99) in `prisma/seed/openings.json` come from the lichess-org/chess-openings dataset (CC0 1.0).
+
 This script walks through an end-to-end demonstration of the Longitudinal Chess Analytics Engine in 8 minutes.
 
 ---
