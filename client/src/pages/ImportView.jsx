@@ -105,7 +105,7 @@ export function ImportView() {
   };
 
   const handleDeleteAccount = async (account) => {
-    const confirmed = window.confirm(`Are you sure you want to unlink ${account.platform} account "${account.username}"?`);
+    const confirmed = window.confirm(`Are you sure you want to unlink ${account.platform.name} account "${account.username}"?`);
     if (!confirmed) return;
 
     try {
@@ -315,11 +315,11 @@ export function ImportView() {
               <div key={acc.id} className="py-3 flex items-center justify-between">
                 <div>
                   <span className="font-medium text-gray-900 dark:text-gray-100 capitalize">
-                    {acc.platform}
+                    {acc.platform.name}
                   </span>
                   <span className="text-gray-500 dark:text-gray-400 ml-2">@{acc.username}</span>
                   <span className="text-xs text-gray-400 dark:text-gray-500 block">
-                    Last synced: {acc.last_synced_at || acc.lastSyncedAt ? new Date(acc.last_synced_at || acc.lastSyncedAt).toLocaleString() : 'Never'}
+                    Last synced: {acc.lastSyncedAt ? new Date(acc.lastSyncedAt).toLocaleString() : 'Never'}
                   </span>
                 </div>
                 <div className="flex space-x-2">
@@ -405,7 +405,7 @@ export function ImportView() {
                 <option value="">None / Standalone</option>
                 {accounts.map((a) => (
                   <option key={a.id} value={a.id}>
-                    {a.platform} - {a.username}
+                    {a.platform.name} - {a.username}
                   </option>
                 ))}
               </select>
@@ -437,7 +437,7 @@ export function ImportView() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-xl max-w-md w-full p-6 shadow-xl space-y-4">
             <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">
-              Sync {syncAccount.platform} (@{syncAccount.username})
+              Sync {syncAccount.platform.name} (@{syncAccount.username})
             </h3>
 
             {syncError && (
