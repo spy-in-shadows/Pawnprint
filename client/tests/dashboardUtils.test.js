@@ -39,12 +39,12 @@ describe('dashboardUtils pure logic', () => {
     it('sorts openings by moves descending and limits to top 10 with ECO + name labels and ply bucket', () => {
       const input = Array.from({ length: 15 }, (_, i) => ({
         eco: `B${10 + i}`,
-        opening_name: `Opening ${i}`,
-        ply_bucket: '1-10',
+        name: `Opening ${i}`,
+        plyBucket: '1-10',
         moves: (i + 1) * 10,
         blunders: i,
-        blunders_per_100_moves: 5.5,
-        avg_cp_loss: 25.0,
+        blundersPer100: 5.5,
+        avgCpLoss: 25.0,
       }));
 
       const shaped = shapeOpeningsData(input);
@@ -56,9 +56,9 @@ describe('dashboardUtils pure logic', () => {
       expect(shaped[9].moves).toBe(60);
     });
 
-    it('handles camelCase and snake_case properties consistently', () => {
+    it('reads the /analytics/openings row shape', () => {
       const input = [
-        { eco: 'C50', name: 'Italian Game', plyBucket: '11-20', moves: 50, blunders: 2, avgCpLoss: 18.2 },
+        { eco: 'C50', name: 'Italian Game', plyBucket: '11-20', moves: 50, blunders: 2, blundersPer100: 4, avgCpLoss: 18.2 },
       ];
       const shaped = shapeOpeningsData(input);
       expect(shaped).toHaveLength(1);
@@ -75,9 +75,9 @@ describe('dashboardUtils pure logic', () => {
   describe('shapePhasesData', () => {
     it('orders phases opening, middlegame, endgame and preserves moves count', () => {
       const input = [
-        { phase: 'endgame', moves: 120, accuracy_pct: 68.5, blunders: 5, avg_cp_loss: 45.2 },
-        { phase: 'opening', moves: 300, accuracy_pct: 91.2, blunders: 1, avg_cp_loss: 15.0 },
-        { phase: 'middlegame', moves: 450, accuracy_pct: 75.0, blunders: 12, avg_cp_loss: 32.1 },
+        { phase: 'endgame', moves: 120, accuracyPct: 68.5, blunders: 5, avgCpLoss: 45.2 },
+        { phase: 'opening', moves: 300, accuracyPct: 91.2, blunders: 1, avgCpLoss: 15.0 },
+        { phase: 'middlegame', moves: 450, accuracyPct: 75.0, blunders: 12, avgCpLoss: 32.1 },
       ];
 
       const shaped = shapePhasesData(input);
@@ -94,7 +94,7 @@ describe('dashboardUtils pure logic', () => {
     });
 
     it('fills missing phases with 0', () => {
-      const shaped = shapePhasesData([{ phase: 'opening', moves: 50, accuracy_pct: 88 }]);
+      const shaped = shapePhasesData([{ phase: 'opening', moves: 50, accuracyPct: 88 }]);
       expect(shaped).toHaveLength(3);
       expect(shaped[1].phase).toBe('Middlegame');
       expect(shaped[1].moves).toBe(0);
@@ -105,9 +105,9 @@ describe('dashboardUtils pure logic', () => {
   describe('shapeTimePressureData', () => {
     it('enforces exact bucket order: >50%, 25-50%, 10-25%, <10%', () => {
       const unordered = [
-        { bucket: '<10%', moves: 12, blunders: 4, blunders_per_100_moves: 33.3, avg_cp_loss: 45 },
-        { bucket: '>50%', moves: 100, blunders: 2, blunders_per_100_moves: 2.0, avg_cp_loss: 15 },
-        { bucket: '10-25%', moves: 30, blunders: 5, blunders_per_100_moves: 16.6, avg_cp_loss: 30 },
+        { bucket: '<10%', moves: 12, blunders: 4, blundersPer100: 33.3, avgCpLoss: 45 },
+        { bucket: '>50%', moves: 100, blunders: 2, blundersPer100: 2.0, avgCpLoss: 15 },
+        { bucket: '10-25%', moves: 30, blunders: 5, blundersPer100: 16.6, avgCpLoss: 30 },
       ];
 
       const shaped = shapeTimePressureData(unordered);
@@ -138,8 +138,8 @@ describe('dashboardUtils pure logic', () => {
   describe('shapeTrendData', () => {
     it('shapes trend with raw and rolling accuracy', () => {
       const input = [
-        { game_date: '2026-01-01T12:00:00Z', accuracy_pct: 75.5, rolling_accuracy_pct: 75.5, moves: 40 },
-        { game_date: '2026-01-02T12:00:00Z', accuracy_pct: 85.0, rolling_accuracy_pct: 80.25, moves: 45 },
+        { day: '2026-01-01', games: 3, accuracyPct: 75.5, avgCpLoss: 20, rollingAccuracyPct: 75.5 },
+        { day: '2026-01-02', games: 4, accuracyPct: 85.0, avgCpLoss: 12, rollingAccuracyPct: 80.25 },
       ];
 
       const shaped = shapeTrendData(input);
@@ -148,16 +148,17 @@ describe('dashboardUtils pure logic', () => {
       expect(shaped[0].accuracyPct).toBe(75.5);
       expect(shaped[0].rollingAccuracy).toBe(75.5);
       expect(shaped[1].rollingAccuracy).toBe(80.25);
+      expect(shaped[1].games).toBe(4);
     });
   });
 
   describe('shapeMotifsData', () => {
     it('merges allowed and missed series for each motif labelled errors per 100 moves', () => {
       const rows = [
-        { motif: 'fork', kind: 'allowed', error_count: 4, errors_per_100_moves: 2.5 },
-        { motif: 'fork', kind: 'missed', error_count: 6, errors_per_100_moves: 3.75 },
-        { motif: 'pin', kind: 'allowed', error_count: 2, errors_per_100_moves: 1.25 },
-        { motif: 'hanging_piece', kind: 'missed', error_count: 8, errors_per_100_moves: 5.0 },
+        { motif: 'fork', kind: 'allowed', errorCount: 4, totalMoves: 160, errorsPer100Moves: 2.5 },
+        { motif: 'fork', kind: 'missed', errorCount: 6, totalMoves: 160, errorsPer100Moves: 3.75 },
+        { motif: 'pin', kind: 'allowed', errorCount: 2, totalMoves: 160, errorsPer100Moves: 1.25 },
+        { motif: 'hanging_piece', kind: 'missed', errorCount: 8, totalMoves: 160, errorsPer100Moves: 5.0 },
       ];
 
       const shaped = shapeMotifsData(rows);
