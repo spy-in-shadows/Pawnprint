@@ -49,6 +49,15 @@ A longitudinal chess analytics engine that ingests games from Lichess, Chess.com
   - Ubuntu/Debian: `sudo apt-get install stockfish` (binary at `/usr/games/stockfish`)
 - Optional for puzzles: `zstd` (`brew install zstd` or `apt-get install zstd`)
 
+### Install
+```bash
+git clone https://github.com/spy-in-shadows/Pawnprint.git
+cd Pawnprint
+npm install
+npm --prefix client install
+```
+`npm install` also generates the Prisma client and pins the Prisma CLI that the commands below use.
+
 ### Environment & Database
 1. Copy the environment configuration:
    ```bash
@@ -58,6 +67,7 @@ A longitudinal chess analytics engine that ingests games from Lichess, Chess.com
    ```bash
    docker compose up -d
    ```
+   If another Postgres already listens on port 5432, start it on a free port instead, for example `POSTGRES_PORT=5433 docker compose up -d`, and change the port in `DATABASE_URL` in `.env` to match.
 3. Apply database migrations:
    ```bash
    npx prisma migrate deploy
@@ -94,16 +104,20 @@ Import tactical training puzzles from the Lichess puzzle bank into the database:
   npm run worker
   ```
   *(Multiple worker processes can be started in separate terminals; each worker will concurrently process jobs for different accounts without colliding).*
-- **Build and Run Client SPA**:
+- **Client**: build it once and the API serves it at http://localhost:3000, or run the Vite dev server (http://localhost:5173, proxying `/api` to port 3000) while working on the client:
   ```bash
   npm --prefix client run build
   npm --prefix client run dev
   ```
-- **Running Tests**:
+- **Running Tests**: the server suites delete rows (all users and puzzles among them) from the database they run against, so give them their own database rather than the one in `.env`. With the Compose database on port 5432:
   ```bash
+  docker compose exec db createdb -U chess chess_test
+  export DATABASE_URL=postgresql://chess:chess@localhost:5432/chess_test
+  npx prisma migrate deploy && npm run seed
   npm test
   npm --prefix client test
   ```
+  The Stockfish-backed test files skip themselves when `STOCKFISH_PATH` does not point at an engine.
 
 ## Command Reference
 
@@ -215,4 +229,6 @@ All data routes require `Authorization: Bearer <jwt>`. Accessing another user's 
 - **Rule-Based Tactical Motifs**: Tactical motif detection inspects board geometry after the move and after Stockfish's single best reply. Deep motifs or missed tactics beyond one reply are not identified.
 - **Move-Frequency Rates**: `errors_per_100_moves` measures blunder occurrences per 100 moves played by the user, rather than opportunity-normalized tactical rates.
 - **External Platform Formats**: Third-party API rate limits and upstream format changes on Lichess or Chess.com can impact streaming ingestion.
+- **Game Count per Sync**: Lichess applies `max` before variant games are filtered out, so a sync of N games for a player who also plays variants stores fewer than N standard games (the rest are counted as skipped).
+- **Opening Names**: games are linked to an opening only when their ECO code is in the seeded list (`prisma/seed/openings.json`); others show as unknown.
 - **Puzzle Bank Sampling**: Puzzle bank import relies on sampling or subset selection when importing from multi-gigabyte Lichess puzzle archives.
