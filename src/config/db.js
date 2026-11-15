@@ -7,6 +7,13 @@ import pg from 'pg';
 import config from './env.js';
 import { logger } from '../utils/logger.js';
 
+// Timestamp columns are `timestamp without time zone` holding UTC wall-clock time, which is how
+// Prisma writes and reads them. pg defaults to the host's local zone in both directions, so on any
+// non-UTC machine raw-SQL writes (played_at from the bulk insert) would be shifted by the offset.
+const TIMESTAMP_OID = 1114;
+pg.defaults.parseInputDatesAsUTC = true;
+pg.types.setTypeParser(TIMESTAMP_OID, (value) => new Date(`${value.replace(' ', 'T')}Z`));
+
 export const prisma = new PrismaClient({
   log: config.nodeEnv === 'development' ? ['warn', 'error'] : ['error'],
 });

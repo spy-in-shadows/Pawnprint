@@ -54,16 +54,13 @@ async function loadMoves(gameId) {
   });
 }
 
-// GREATEST keeps the cursor from moving backwards when a job imports an older date range. The
-// value is passed as an ISO string and converted in SQL because pg would otherwise serialize the
-// Date in the host's local zone, while the column holds UTC wall-clock time.
+// GREATEST keeps the cursor from moving backwards when a job imports an older date range.
 async function advanceCursor(accountId, newestPlayedAt) {
   await pgPool.query(
     `UPDATE player_accounts
-     SET last_synced_at = GREATEST(COALESCE(last_synced_at, $2::timestamptz AT TIME ZONE 'UTC'),
-                                   $2::timestamptz AT TIME ZONE 'UTC')
+     SET last_synced_at = GREATEST(COALESCE(last_synced_at, $2::timestamp), $2::timestamp)
      WHERE id = $1`,
-    [accountId, newestPlayedAt.toISOString()],
+    [accountId, newestPlayedAt],
   );
 }
 
