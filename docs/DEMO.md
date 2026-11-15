@@ -29,6 +29,8 @@ This script walks through an end-to-end demonstration of the Longitudinal Chess 
    ```
 6. Open your browser to `http://localhost:5173`.
 
+**After a reboot**: start Docker Desktop, run `docker compose up -d` to start the database again, then start the API (`npm run dev`) and the worker (`npm run worker`) in their own terminals. The data is kept in the Docker volume, so there is no need to migrate or seed again.
+
 ---
 
 ## 2. Authentication, Account Linking & Game Ingestion (1:00 - 2:30)
@@ -39,7 +41,7 @@ This script walks through an end-to-end demonstration of the Longitudinal Chess 
    - Notice the automatic redirect to `/dashboard`.
 2. **Link a Chess Account**:
    - Navigate to `/import`.
-   - In "Link Account", select platform **Lichess** and enter a username (e.g. `rebel_king`).
+   - In "Link Account", select platform **Lichess** and enter a username (e.g. `DrNykterstein`, a public account with plenty of recent rapid and blitz games). Any account with at least 30 recent games works.
    - Click **Link Account**. The linked account appears in the Linked Accounts table.
 3. **Trigger Ingestion**:
    - Click **Sync Games** on the newly linked account.
