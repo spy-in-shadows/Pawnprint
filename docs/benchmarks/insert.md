@@ -16,6 +16,13 @@
 
 \* Extrapolated from 500-game sample (12.61s).
 
+## Scale Run (10,000 Games)
+`node scripts/benchmarkInsert.js --games 10000 --strategy unnest`, same machine:
+
+| Strategy                        |  Games | Plies / Game | Total Plies | Duration | Moves / sec |
+| :------------------------------ | -----: | -----------: | ----------: | -------: | ----------: |
+| pg UNNEST (insertGameWithMoves) | 10,000 |           40 |     400,000 |   52.92s |       7,559 |
+
 ## Analysis
 - **Write Amplification in Per-Row ORM**: Inserting each move as an isolated row (`prisma.move.create`) produces significant network overhead and transaction commit overhead (one round trip and WAL flush per ply).
 - **Prisma createMany**: Batching moves into a single `createMany` per game eliminates ply-level round trips, bringing moves/sec up by 6.4x compared to per-row, but remains bounded by client-side query generation and parameters limit.
