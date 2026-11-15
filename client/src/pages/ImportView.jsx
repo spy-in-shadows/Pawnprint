@@ -2,6 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../lib/api';
 import { validateDateRange, shouldStopPolling, calculateProgress } from '../lib/importUtils';
 
+// Must match the multer limit in src/routes/uploads.routes.js.
+const MAX_PGN_BYTES = 5 * 1024 * 1024;
+// Upload accounts have nothing to fetch; their games arrive through PGN uploads.
+const SYNCABLE_PLATFORMS = new Set(['lichess', 'chesscom']);
+
 export function ImportView() {
   const [accounts, setAccounts] = useState([]);
   const [loadingAccounts, setLoadingAccounts] = useState(true);
@@ -171,8 +176,8 @@ export function ImportView() {
       return;
     }
 
-    if (pgnFile.size > 10 * 1024 * 1024) {
-      setUploadError('PGN file must be under 10MB.');
+    if (pgnFile.size > MAX_PGN_BYTES) {
+      setUploadError('PGN file must be 5 MB or smaller.');
       return;
     }
 
@@ -320,12 +325,14 @@ export function ImportView() {
                   </span>
                 </div>
                 <div className="flex space-x-2">
-                  <button
-                    onClick={() => openSyncModal(acc)}
-                    className="px-3 py-1.5 text-xs font-medium rounded-md bg-indigo-50 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300 hover:bg-indigo-100"
-                  >
-                    Sync
-                  </button>
+                  {SYNCABLE_PLATFORMS.has(acc.platform.name) && (
+                    <button
+                      onClick={() => openSyncModal(acc)}
+                      className="px-3 py-1.5 text-xs font-medium rounded-md bg-indigo-50 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300 hover:bg-indigo-100"
+                    >
+                      Sync
+                    </button>
+                  )}
                   <button
                     onClick={() => handleDeleteAccount(acc)}
                     className="px-3 py-1.5 text-xs font-medium rounded-md bg-red-50 text-red-700 dark:bg-red-900/40 dark:text-red-300 hover:bg-red-100"
@@ -385,7 +392,7 @@ export function ImportView() {
           Upload PGN File
         </h2>
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-          Upload a standard PGN file (up to 10MB) to ingest and queue for analysis.
+          Upload a standard PGN file (up to 5 MB) to ingest and queue for analysis.
         </p>
 
         <form onSubmit={handlePgnUpload} className="space-y-4">
