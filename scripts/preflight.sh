@@ -32,7 +32,7 @@ OWN_A=("docker-compose.yml" ".env.example" ".github/workflows/*" "src/config/*" 
   "src/chess/pgnParser.js" "src/ingest/*" "src/repositories/moveBulk.repo.js" "src/services/import.service.js"
   "scripts/benchmarkInsert.js" "scripts/importPuzzles.js" "scripts/README.md" "docs/benchmarks/insert.md"
   "tests/config.test.js" "tests/logger.test.js" "tests/schema.*" "tests/seed.test.js" "tests/db.test.js"
-  "tests/parser.test.js" "tests/moveBulk.test.js" "tests/import.service.test.js" "tests/importPuzzles.test.js" "tests/fixtures/*")
+  "tests/parser.test.js" "tests/moveBulk.test.js" "tests/import.service.test.js" "tests/importPuzzles.test.js" "tests/benchmarkInsert.test.js" "tests/fixtures/*")
 OWN_B=("package.json" "package-lock.json" "vitest.config.js" ".gitignore" "DESIGN.md" "ENGINEERING.md" "README.md" "docs/CONTRACTS.md"
   ".github/pull_request_template.md" ".github/CODEOWNERS" "scripts/preflight.sh"
   "src/app.js" "src/server.js" "src/worker.js" "src/utils/errors.js" "src/middleware/errorHandler.js" "src/routes/v1/index.js"

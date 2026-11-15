@@ -28,6 +28,7 @@
 /tests/moveBulk.test.js  @07shlokjoshi
 /tests/import.service.test.js  @07shlokjoshi
 /tests/importPuzzles.test.js  @07shlokjoshi
+/tests/benchmarkInsert.test.js  @07shlokjoshi
 /tests/fixtures/  @07shlokjoshi
 
 # Person B
