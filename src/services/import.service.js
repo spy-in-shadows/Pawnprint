@@ -109,7 +109,8 @@ export async function getJobStatus(userId, jobId) {
   }
 
   const totalGames = job.jobGames.length;
-  const completedGames = job.jobGames.filter((g) => g.status === 'completed').length;
+  // analysis_job_games.status is pending | analyzing | done | failed (docs/CONTRACTS.md).
+  const completedGames = job.jobGames.filter((g) => g.status === 'done').length;
   const failedGamesCount = job.jobGames.filter((g) => g.status === 'failed').length;
   const failedGames = job.failedGames != null && job.failedGames > 0 ? job.failedGames : failedGamesCount;
   const skippedGames = job.skippedGames != null ? job.skippedGames : 0;

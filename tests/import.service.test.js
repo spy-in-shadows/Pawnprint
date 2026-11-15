@@ -204,6 +204,35 @@ describe('import.service', () => {
     expect(statusInitial.createdAt).toBeInstanceOf(Date);
   });
 
+  // The worker records finished games as 'done' (see analysis_job_games in DESIGN.md section 4).
+  it('getJobStatus counts games the worker finished as completed', async () => {
+    await prisma.analysisJob.deleteMany({ where: { playerAccountId: account1.id } });
+    const job = await createImportJob(user1.id, { accountId: account1.id });
+    const start = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+    const games = ['done', 'failed', 'analyzing'].map((status, i) => ({
+      externalId: `progress_${Date.now()}_${i}`,
+      white: account1.username,
+      black: 'Opponent',
+      resultRaw: '1-0',
+      timeControl: { baseSeconds: 300, incrementSeconds: 0, category: 'blitz' },
+      playedAt: new Date('2023-02-01T12:00:00Z'),
+      totalPlies: 1,
+      parseError: null,
+      moves: [{ ply: 1, san: 'e4', uci: 'e2e4', fenBefore: start, moverColor: 'white', phase: 'opening', clockRemainingMs: null, timeSpentMs: null }],
+      status,
+    }));
+    const { insertedGameIds } = await ingestParsedGames(account1.id, games);
+    for (let i = 0; i < games.length; i += 1) {
+      await pgPool.query(
+        'INSERT INTO analysis_job_games (job_id, game_id, status) VALUES ($1, $2, $3)',
+        [job.id, insertedGameIds[i], games[i].status],
+      );
+    }
+
+    const status = await getJobStatus(user1.id, job.id);
+    expect(status).toMatchObject({ totalGames: 3, completedGames: 1, failedGames: 1 });
+  });
+
   it('ingestParsedGames is idempotent and tracks newestPlayedAt of new games only', async () => {
     const timestamp = Date.now();
     const game1 = {
