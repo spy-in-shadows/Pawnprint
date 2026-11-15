@@ -4,7 +4,7 @@
 
 Ingest a player's games (Lichess, Chess.com, PGN upload), evaluate every move with Stockfish, store everything in a fully normalized PostgreSQL schema, aggregate it into longitudinal diagnostics (by opening, game phase, time pressure, tactical motif), and turn those diagnostics into a personalized puzzle training plan.
 
-## 2. Tech stack (mapped to your syllabus)
+## 2. Tech stack (mapped to the course syllabus)
 
 | Layer | Choice | Syllabus topic |
 |---|---|---|
@@ -85,6 +85,7 @@ Design rules: no JSON blobs for move data, no wide NULL-filled rows, every repea
 
 ### Indexing guidance
 - Heavy-write tables (`moves`, `move_evals`): only the PK and the one UNIQUE.
+- `analysis_jobs(status, created_at)` serves the claim query's `ORDER BY created_at` over queued and stale running jobs; besides the primary key, the only other index on the jobs table is the partial unique index above.
 - Analytics indexes live on `games(player_account_id, played_at)`, `player_accounts(user_id)` and `move_motifs(motif_id)`. `move_classifications(classification_id)` has no index: the plans in `docs/explain/` join it by `move_id` (its primary key).
 - All index decisions backed by `EXPLAIN ANALYZE` measurement stored in `docs/explain/`. At the measured 10k-game size the two added indexes made no measurable difference (REPORT.md section 5); they are kept for multi-user scale.
 
