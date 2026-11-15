@@ -364,10 +364,11 @@ export function ImportView() {
         {/* Link Account Form */}
         <form onSubmit={handleLinkAccount} className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700 flex flex-wrap gap-3 items-end">
           <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label htmlFor="link-platform" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
               Platform
             </label>
             <select
+              id="link-platform"
               value={linkPlatform}
               onChange={(e) => setLinkPlatform(e.target.value)}
               className="px-3 py-2 border rounded-md dark:bg-gray-900 dark:border-gray-700 text-sm"
@@ -378,10 +379,11 @@ export function ImportView() {
           </div>
 
           <div className="flex-1 min-w-[200px]">
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label htmlFor="link-username" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
               Username
             </label>
             <input
+              id="link-username"
               type="text"
               required
               value={linkUsername}
@@ -414,10 +416,11 @@ export function ImportView() {
         <form onSubmit={handlePgnUpload} className="space-y-4">
           {accounts.length > 0 && (
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label htmlFor="pgn-account" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Associate with Account (Optional)
               </label>
               <select
+                id="pgn-account"
                 value={pgnAccountId}
                 onChange={(e) => setPgnAccountId(e.target.value)}
                 className="w-full sm:w-80 px-3 py-2 border rounded-md dark:bg-gray-900 dark:border-gray-700 text-sm"
@@ -434,6 +437,7 @@ export function ImportView() {
 
           <div>
             <input
+              aria-label="PGN file"
               type="file"
               accept=".pgn"
               onChange={(e) => setPgnFile(e.target.files?.[0] || null)}
@@ -468,10 +472,11 @@ export function ImportView() {
 
             <form onSubmit={handleStartSync} className="space-y-4">
               <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label htmlFor="sync-max-games" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Most recent N games
                 </label>
                 <select
+                  id="sync-max-games"
                   value={syncMaxGames}
                   onChange={(e) => setSyncMaxGames(e.target.value)}
                   className="w-full px-3 py-2 border rounded-md dark:bg-gray-900 dark:border-gray-700 text-sm"
@@ -484,10 +489,11 @@ export function ImportView() {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label htmlFor="sync-since" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                   From Date (Optional)
                 </label>
                 <input
+                  id="sync-since"
                   type="date"
                   value={syncSince}
                   onChange={(e) => setSyncSince(e.target.value)}
@@ -496,10 +502,11 @@ export function ImportView() {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label htmlFor="sync-until" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                   To Date (Optional)
                 </label>
                 <input
+                  id="sync-until"
                   type="date"
                   value={syncUntil}
                   onChange={(e) => setSyncUntil(e.target.value)}

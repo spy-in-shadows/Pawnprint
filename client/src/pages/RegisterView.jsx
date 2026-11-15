@@ -40,10 +40,11 @@ export function RegisterView() {
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">
+          <label htmlFor="register-email" className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">
             Email address
           </label>
           <input
+            id="register-email"
             type="email"
             required
             value={email}
@@ -53,10 +54,11 @@ export function RegisterView() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">
+          <label htmlFor="register-password" className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">
             Password (min 8 characters)
           </label>
           <input
+            id="register-password"
             type="password"
             required
             minLength={8}
