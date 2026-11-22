@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict 3DKhHmuM7tfbTbHpqsFwRZvWbh4ZI4lRWWnb1PmBTaGyKQMXakctNbazhshvPiz
+\restrict y2l1sU6zGXQeUrdHqgmCcH4AEjjefFjv8da1kq9EwIukv4PzHZ5dtqUNa8ldkdA
 
 -- Dumped from database version 16.15 (Debian 16.15-1.pgdg13+2)
 -- Dumped by pg_dump version 16.15 (Debian 16.15-1.pgdg13+2)
@@ -31,7 +31,10 @@ CREATE TABLE public.account_phase_summary (
     phase_id integer NOT NULL,
     moves integer NOT NULL,
     blunders integer NOT NULL,
-    avg_cp_loss double precision NOT NULL
+    avg_cp_loss double precision NOT NULL,
+    CONSTRAINT account_phase_summary_avg_cp_loss_check CHECK ((avg_cp_loss >= (0)::double precision)),
+    CONSTRAINT account_phase_summary_blunders_check CHECK ((blunders >= 0)),
+    CONSTRAINT account_phase_summary_moves_check CHECK ((moves >= 0))
 );
 
 
@@ -50,7 +53,15 @@ CREATE TABLE public.account_summary (
     avg_cp_loss double precision NOT NULL,
     accuracy_pct double precision NOT NULL,
     last_game_at timestamp(3) without time zone,
-    refreshed_at timestamp(3) without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
+    refreshed_at timestamp(3) without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT account_summary_accuracy_pct_check CHECK (((accuracy_pct >= (0)::double precision) AND (accuracy_pct <= (100)::double precision))),
+    CONSTRAINT account_summary_analyzed_games_check CHECK ((analyzed_games >= 0)),
+    CONSTRAINT account_summary_avg_cp_loss_check CHECK ((avg_cp_loss >= (0)::double precision)),
+    CONSTRAINT account_summary_blunders_check CHECK ((blunders >= 0)),
+    CONSTRAINT account_summary_inaccuracies_check CHECK ((inaccuracies >= 0)),
+    CONSTRAINT account_summary_mistakes_check CHECK ((mistakes >= 0)),
+    CONSTRAINT account_summary_total_games_check CHECK ((total_games >= 0)),
+    CONSTRAINT account_summary_total_moves_check CHECK ((total_moves >= 0))
 );
 
 
@@ -62,7 +73,8 @@ CREATE TABLE public.analysis_job_games (
     job_id integer NOT NULL,
     game_id integer NOT NULL,
     status text DEFAULT 'pending'::text NOT NULL,
-    error text
+    error text,
+    CONSTRAINT analysis_job_games_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'analyzing'::text, 'done'::text, 'failed'::text])))
 );
 
 
@@ -85,7 +97,13 @@ CREATE TABLE public.analysis_jobs (
     failed_games integer DEFAULT 0 NOT NULL,
     skipped_games integer DEFAULT 0 NOT NULL,
     created_at timestamp(3) without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    finished_at timestamp(3) without time zone
+    finished_at timestamp(3) without time zone,
+    CONSTRAINT analysis_jobs_attempts_check CHECK ((attempts >= 0)),
+    CONSTRAINT analysis_jobs_failed_games_check CHECK ((failed_games >= 0)),
+    CONSTRAINT analysis_jobs_max_games_check CHECK ((max_games > 0)),
+    CONSTRAINT analysis_jobs_since_until_check CHECK (((since IS NULL) OR (until IS NULL) OR (since <= until))),
+    CONSTRAINT analysis_jobs_skipped_games_check CHECK ((skipped_games >= 0)),
+    CONSTRAINT analysis_jobs_status_check CHECK ((status = ANY (ARRAY['queued'::text, 'running'::text, 'completed'::text, 'failed'::text])))
 );
 
 
@@ -149,7 +167,10 @@ CREATE TABLE public.engine_versions (
     version text NOT NULL,
     default_depth integer NOT NULL,
     threads integer DEFAULT 1 NOT NULL,
-    hash_size integer DEFAULT 64 NOT NULL
+    hash_size integer DEFAULT 64 NOT NULL,
+    CONSTRAINT engine_versions_default_depth_check CHECK ((default_depth > 0)),
+    CONSTRAINT engine_versions_hash_size_check CHECK ((hash_size > 0)),
+    CONSTRAINT engine_versions_threads_check CHECK ((threads > 0))
 );
 
 
@@ -191,7 +212,12 @@ CREATE TABLE public.games (
     opponent_rating integer,
     total_plies integer NOT NULL,
     analysis_status text DEFAULT 'pending'::text NOT NULL,
-    failure_reason text
+    failure_reason text,
+    CONSTRAINT games_analysis_status_check CHECK ((analysis_status = ANY (ARRAY['pending'::text, 'analyzed'::text, 'failed'::text]))),
+    CONSTRAINT games_color_check CHECK ((color = ANY (ARRAY['white'::text, 'black'::text]))),
+    CONSTRAINT games_opponent_rating_check CHECK (((opponent_rating IS NULL) OR (opponent_rating >= 0))),
+    CONSTRAINT games_player_rating_check CHECK (((player_rating IS NULL) OR (player_rating >= 0))),
+    CONSTRAINT games_total_plies_check CHECK ((total_plies >= 0))
 );
 
 
@@ -252,7 +278,8 @@ ALTER SEQUENCE public.motifs_id_seq OWNED BY public.motifs.id;
 CREATE TABLE public.move_classifications (
     move_id integer NOT NULL,
     classification_id integer NOT NULL,
-    cp_loss integer NOT NULL
+    cp_loss integer NOT NULL,
+    CONSTRAINT move_classifications_cp_loss_check CHECK ((cp_loss >= 0))
 );
 
 
@@ -266,7 +293,8 @@ CREATE TABLE public.move_evals (
     eval_after_cp integer NOT NULL,
     best_uci text NOT NULL,
     depth integer NOT NULL,
-    engine_version_id integer NOT NULL
+    engine_version_id integer NOT NULL,
+    CONSTRAINT move_evals_depth_check CHECK ((depth >= 0))
 );
 
 
@@ -288,7 +316,8 @@ CREATE TABLE public.move_mates (
 CREATE TABLE public.move_motifs (
     move_id integer NOT NULL,
     motif_id integer NOT NULL,
-    kind text DEFAULT 'allowed'::text NOT NULL
+    kind text DEFAULT 'allowed'::text NOT NULL,
+    CONSTRAINT move_motifs_kind_check CHECK ((kind = ANY (ARRAY['allowed'::text, 'missed'::text])))
 );
 
 
@@ -306,7 +335,11 @@ CREATE TABLE public.moves (
     mover_color text NOT NULL,
     clock_remaining_ms integer,
     time_spent_ms integer,
-    phase_id integer NOT NULL
+    phase_id integer NOT NULL,
+    CONSTRAINT moves_clock_remaining_ms_check CHECK (((clock_remaining_ms IS NULL) OR (clock_remaining_ms >= 0))),
+    CONSTRAINT moves_mover_color_check CHECK ((mover_color = ANY (ARRAY['white'::text, 'black'::text]))),
+    CONSTRAINT moves_ply_check CHECK ((ply > 0)),
+    CONSTRAINT moves_time_spent_ms_check CHECK (((time_spent_ms IS NULL) OR (time_spent_ms >= 0)))
 );
 
 
@@ -475,7 +508,8 @@ CREATE TABLE public.puzzles (
     fen text NOT NULL,
     moves_uci text NOT NULL,
     rating integer NOT NULL,
-    phase_tag text
+    phase_tag text,
+    CONSTRAINT puzzles_rating_check CHECK ((rating > 0))
 );
 
 
@@ -537,7 +571,10 @@ CREATE TABLE public.time_controls (
     id integer NOT NULL,
     base_seconds integer NOT NULL,
     increment_seconds integer NOT NULL,
-    category text NOT NULL
+    category text NOT NULL,
+    CONSTRAINT time_controls_base_seconds_check CHECK ((base_seconds >= 0)),
+    CONSTRAINT time_controls_category_check CHECK ((category = ANY (ARRAY['bullet'::text, 'blitz'::text, 'rapid'::text, 'classical'::text, 'correspondence'::text]))),
+    CONSTRAINT time_controls_increment_seconds_check CHECK ((increment_seconds >= 0))
 );
 
 
@@ -1316,5 +1353,5 @@ ALTER TABLE ONLY public.training_plans
 -- PostgreSQL database dump complete
 --
 
-\unrestrict 3DKhHmuM7tfbTbHpqsFwRZvWbh4ZI4lRWWnb1PmBTaGyKQMXakctNbazhshvPiz
+\unrestrict y2l1sU6zGXQeUrdHqgmCcH4AEjjefFjv8da1kq9EwIukv4PzHZ5dtqUNa8ldkdA
 

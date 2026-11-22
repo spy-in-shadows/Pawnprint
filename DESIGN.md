@@ -83,6 +83,14 @@ Design rules: no JSON blobs for move data, no wide NULL-filled rows, every repea
 - `account_phase_summary(player_account_id, phase_id, moves, blunders, avg_cp_loss, PRIMARY KEY(player_account_id, phase_id))`
 - Rebuilt per account by `refreshAccountSummary` when a job completes; they count only the owner's moves in analyzed games.
 
+### Constraints
+- Every table has a primary key; foreign keys use `ON DELETE CASCADE` for ownership (user -> accounts -> games -> moves -> evaluations), `RESTRICT` for lookups in use and `SET NULL` for optional lookups.
+- Unique keys make imports idempotent and stop duplicates: `games(platform_id, external_id)`, `player_accounts(platform_id, username)`, `moves(game_id, ply)`, `users(email)`, natural keys of the lookups, and the partial unique index on active jobs above.
+- CHECK constraints (migration `20261122161952_add_check_constraints`, not modelled by Prisma; listed in comments in `prisma/schema.prisma`):
+  - value sets: `games.color` and `moves.mover_color` in (`white`, `black`); `games.analysis_status` in (`pending`, `analyzed`, `failed`); `analysis_jobs.status` in (`queued`, `running`, `completed`, `failed`); `analysis_job_games.status` in (`pending`, `analyzing`, `done`, `failed`); `move_motifs.kind` in (`allowed`, `missed`); `time_controls.category` in (`bullet`, `blitz`, `rapid`, `classical`, `correspondence`).
+  - ranges: `moves.ply > 0`; `games.total_plies`, clocks, time spent, time-control seconds, `cp_loss`, job counters and summary counts and averages `>= 0`; game ratings `>= 0` and puzzle ratings `> 0`; `move_evals.depth >= 0` (terminal positions use depth 0); engine depth, threads and hash `> 0`; `analysis_jobs.max_games > 0`; `since <= until` when both are set; `account_summary.accuracy_pct` between 0 and 100.
+- Rules that need other rows, other tables or chess logic stay in the application and in the data-quality checks (`src/workers/dataQuality.js`): the `reason_code` format, depth 0 paired with `best_uci = 'none'`, one name per ECO code, `games.platform_id` equal to the account's platform, and move consistency (mover colour, SAN and UCI against the FEN).
+
 ### Indexing guidance
 - Heavy-write tables (`moves`, `move_evals`): only the PK and the one UNIQUE.
 - `analysis_jobs(status, created_at)` serves the claim query's `ORDER BY created_at` over queued and stale running jobs; besides the primary key, the only other index on the jobs table is the partial unique index above.

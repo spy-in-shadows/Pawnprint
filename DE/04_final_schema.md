@@ -8,7 +8,7 @@ docker compose -p pawnprint-demo exec -T db pg_dump -U chess -d chess_analytics 
 
 after which the blocks of the Prisma bookkeeping table `_prisma_migrations` were removed (a short Python filter that drops every `-- Name:` block mentioning that table). The resulting file was checked by loading it into an empty database (`CREATE DATABASE schema_check`, then `psql -v ON_ERROR_STOP=1 -f DE/schema.sql`), which created the 24 tables without errors; the check database was dropped afterwards.
 
-The schema itself is defined in `prisma/schema.prisma` and created by the six migrations in `prisma/migrations/`:
+The schema itself is defined in `prisma/schema.prisma` and created by the seven migrations in `prisma/migrations/`:
 
 | Migration | What it adds |
 |---|---|
@@ -18,13 +18,14 @@ The schema itself is defined in `prisma/schema.prisma` and created by the six mi
 | `20261112105133_engine_key_and_job_counters_not_null` | backfills NULLs, then sets NOT NULL on `engine_versions.threads`, `engine_versions.hash_size`, `analysis_jobs.max_games`, `failed_games`, `skipped_games` |
 | `20261114161727_analytics_indexes` | `idx_move_motifs_motif_id`, `idx_player_accounts_user_id` |
 | `20261114162509_account_summaries` | `account_summary`, `account_phase_summary` |
+| `20261122161952_add_check_constraints` | 37 `CHECK` constraints on value sets and ranges (hand-written SQL; see each table below) |
 
 General rules visible in every table:
 
 - Every table has a primary key; entity tables use a `SERIAL` integer `id`, one-to-one tables reuse `move_id` or `player_account_id`, link tables use a composite key.
 - Every foreign key has `ON UPDATE CASCADE` (the Prisma default). `ON DELETE` is `CASCADE` for ownership (user -> accounts -> games -> moves -> evaluations), `RESTRICT` for lookups that are still in use, and `SET NULL` for the optional lookups `games.opening_id`, `games.time_control_id` and `training_plan_items.motif_id`.
 - Timestamps are `timestamp(3) without time zone` holding UTC; raw SQL writes them with `(NOW() AT TIME ZONE 'UTC')` and `src/config/db.js` sets the `pg` driver to read and write them as UTC.
-- No table has a `CHECK` constraint (see Known limitations in `03_normalization.md`).
+- 37 `CHECK` constraints (migration `20261122161952_add_check_constraints`) restrict status and kind columns to their allowed values and keep counts, clocks, ratings and losses in range; they are listed per table below. Prisma does not model CHECK constraints, so they exist only in the migration SQL, with a comment above each affected model in `prisma/schema.prisma`.
 
 ## Tables
 
@@ -42,7 +43,8 @@ Registered application users. `email` is stored lower-cased and trimmed by `norm
 - Primary key: `users_pkey` (id)
 - Foreign keys: none
 - Unique constraints: `users_email_key` (email)
-- Other constraints: NOT NULL on `id`, `email`, `password_hash`, `created_at`; no CHECK constraints
+- Other constraints: NOT NULL on `id`, `email`, `password_hash`, `created_at`
+- CHECK constraints: none on this table
 - Indexes:
   - `users_email_key` btree (email): Unique email; login looks users up by email (`findByEmail`).
   - `users_pkey` btree (id): Primary key.
@@ -59,7 +61,8 @@ Lookup of game sources: `lichess`, `chesscom` and `upload` (seeded). Rows in the
 - Primary key: `platforms_pkey` (id)
 - Foreign keys: none
 - Unique constraints: `platforms_name_key` (name)
-- Other constraints: NOT NULL on `id`, `name`; no CHECK constraints
+- Other constraints: NOT NULL on `id`, `name`
+- CHECK constraints: none on this table
 - Indexes:
   - `platforms_name_key` btree (name): Unique platform name; looked up by name when linking an account.
   - `platforms_pkey` btree (id): Primary key.
@@ -82,7 +85,8 @@ A user's link to one account on one platform. `last_synced_at` is the import cur
   - `player_accounts_platform_id_fkey`: `platform_id` -> `platforms(id)`, ON DELETE RESTRICT
   - `player_accounts_user_id_fkey`: `user_id` -> `users(id)`, ON DELETE CASCADE
 - Unique constraints: `player_accounts_platform_id_username_key` (platform_id, username)
-- Other constraints: NOT NULL on `id`, `user_id`, `platform_id`, `username`, `created_at`; no CHECK constraints
+- Other constraints: NOT NULL on `id`, `user_id`, `platform_id`, `username`, `created_at`
+- CHECK constraints: none on this table
 - Indexes:
   - `idx_player_accounts_user_id` btree (user_id): Every user-scoped query filters `pa.user_id = $1`. Added in migration `20261114161727_analytics_indexes`; at 10,000 games the planner still chose sequential scans and the change was within noise, so it is kept for many users ([docs/explain/README.md](../docs/explain/README.md)).
   - `player_accounts_pkey` btree (id): Primary key.
@@ -100,7 +104,8 @@ Lookup of game results from the account owner's point of view: `win`, `loss`, `d
 - Primary key: `results_pkey` (id)
 - Foreign keys: none
 - Unique constraints: `results_code_key` (code)
-- Other constraints: NOT NULL on `id`, `code`; no CHECK constraints
+- Other constraints: NOT NULL on `id`, `code`
+- CHECK constraints: none on this table
 - Indexes:
   - `results_code_key` btree (code): Unique result code.
   - `results_pkey` btree (id): Primary key.
@@ -119,7 +124,8 @@ Lookup of clock settings (base and increment in seconds) with their category (`b
 - Primary key: `time_controls_pkey` (id)
 - Foreign keys: none
 - Unique constraints: `time_controls_base_seconds_increment_seconds_key` (base_seconds, increment_seconds)
-- Other constraints: NOT NULL on `id`, `base_seconds`, `increment_seconds`, `category`; no CHECK constraints
+- Other constraints: NOT NULL on `id`, `base_seconds`, `increment_seconds`, `category`
+- CHECK constraints: `time_controls_base_seconds_check` `CHECK ((base_seconds >= 0))`; `time_controls_category_check` `CHECK ((category IN ('bullet', 'blitz', 'rapid', 'classical', 'correspondence')))`; `time_controls_increment_seconds_check` `CHECK ((increment_seconds >= 0))`
 - Indexes:
   - `time_controls_base_seconds_increment_seconds_key` btree (base_seconds, increment_seconds): Natural key; target of the importer's `ON CONFLICT (base_seconds, increment_seconds)` upsert.
   - `time_controls_pkey` btree (id): Primary key.
@@ -137,7 +143,8 @@ Lookup of ECO opening codes and names, seeded from `prisma/seed/openings.json` (
 - Primary key: `openings_pkey` (id)
 - Foreign keys: none
 - Unique constraints: `openings_eco_name_key` (eco, name)
-- Other constraints: NOT NULL on `id`, `eco`, `name`; no CHECK constraints
+- Other constraints: NOT NULL on `id`, `eco`, `name`
+- CHECK constraints: none on this table
 - Indexes:
   - `openings_eco_name_key` btree (eco, name): Natural key; its leading column can also serve the importer's lookup `WHERE eco = $1`.
   - `openings_pkey` btree (id): Primary key.
@@ -171,7 +178,8 @@ One row per imported game: who played it (`player_account_id`), where (`platform
   - `games_result_id_fkey`: `result_id` -> `results(id)`, ON DELETE RESTRICT
   - `games_time_control_id_fkey`: `time_control_id` -> `time_controls(id)`, ON DELETE SET NULL
 - Unique constraints: `games_platform_id_external_id_key` (platform_id, external_id)
-- Other constraints: NOT NULL on `id`, `player_account_id`, `platform_id`, `external_id`, `played_at`, `color`, `result_id`, `total_plies`, `analysis_status`; no CHECK constraints
+- Other constraints: NOT NULL on `id`, `player_account_id`, `platform_id`, `external_id`, `played_at`, `color`, `result_id`, `total_plies`, `analysis_status`
+- CHECK constraints: `games_analysis_status_check` `CHECK ((analysis_status IN ('pending', 'analyzed', 'failed')))`; `games_color_check` `CHECK ((color IN ('white', 'black')))`; `games_opponent_rating_check` `CHECK (((opponent_rating IS NULL) OR (opponent_rating >= 0)))`; `games_player_rating_check` `CHECK (((player_rating IS NULL) OR (player_rating >= 0)))`; `games_total_plies_check` `CHECK ((total_plies >= 0))`
 - Indexes:
   - `games_pkey` btree (id): Primary key.
   - `games_platform_id_external_id_key` btree (platform_id, external_id): Idempotent imports: `ON CONFLICT (platform_id, external_id) DO NOTHING` (query Q01, Q16a).
@@ -189,7 +197,8 @@ Lookup of game phases: `opening`, `middlegame`, `endgame` (seeded). Rows in the 
 - Primary key: `phases_pkey` (id)
 - Foreign keys: none
 - Unique constraints: `phases_name_key` (name)
-- Other constraints: NOT NULL on `id`, `name`; no CHECK constraints
+- Other constraints: NOT NULL on `id`, `name`
+- CHECK constraints: none on this table
 - Indexes:
   - `phases_name_key` btree (name): Unique phase name.
   - `phases_pkey` btree (id): Primary key.
@@ -216,7 +225,8 @@ One row per ply of a game, written once at import by a single UNNEST insert per 
   - `moves_game_id_fkey`: `game_id` -> `games(id)`, ON DELETE CASCADE
   - `moves_phase_id_fkey`: `phase_id` -> `phases(id)`, ON DELETE RESTRICT
 - Unique constraints: `moves_game_id_ply_key` (game_id, ply)
-- Other constraints: NOT NULL on `id`, `game_id`, `ply`, `san`, `uci`, `fen_before`, `mover_color`, `phase_id`; no CHECK constraints
+- Other constraints: NOT NULL on `id`, `game_id`, `ply`, `san`, `uci`, `fen_before`, `mover_color`, `phase_id`
+- CHECK constraints: `moves_clock_remaining_ms_check` `CHECK (((clock_remaining_ms IS NULL) OR (clock_remaining_ms >= 0)))`; `moves_mover_color_check` `CHECK ((mover_color IN ('white', 'black')))`; `moves_ply_check` `CHECK ((ply > 0))`; `moves_time_spent_ms_check` `CHECK (((time_spent_ms IS NULL) OR (time_spent_ms >= 0)))`
 - Indexes:
   - `moves_game_id_ply_key` btree (game_id, ply): One row per ply; also the access path for a game's moves (`WHERE game_id = $1 ORDER BY ply`). Seen as `Index Scan using moves_game_id_ply_key` in [docs/explain/after/6_weakest_opening_phases.txt](../docs/explain/after/6_weakest_opening_phases.txt).
   - `moves_pkey` btree (id): Primary key.
@@ -237,7 +247,8 @@ Immutable engine configurations. A worker registers its Stockfish name and versi
 - Primary key: `engine_versions_pkey` (id)
 - Foreign keys: none
 - Unique constraints: `engine_versions_name_version_default_depth_threads_hash_siz_key` (name, version, default_depth, threads, hash_size)
-- Other constraints: NOT NULL on `id`, `name`, `version`, `default_depth`, `threads`, `hash_size`; no CHECK constraints
+- Other constraints: NOT NULL on `id`, `name`, `version`, `default_depth`, `threads`, `hash_size`
+- CHECK constraints: `engine_versions_default_depth_check` `CHECK ((default_depth > 0))`; `engine_versions_hash_size_check` `CHECK ((hash_size > 0))`; `engine_versions_threads_check` `CHECK ((threads > 0))`
 - Indexes:
   - `engine_versions_name_version_default_depth_threads_hash_siz_key` btree (name, version, default_depth, threads, hash_size): Natural key of an engine configuration (name truncated to 63 characters by PostgreSQL).
   - `engine_versions_pkey` btree (id): Primary key.
@@ -260,7 +271,8 @@ Engine evaluation of one move: score before and after in White-perspective centi
   - `move_evals_engine_version_id_fkey`: `engine_version_id` -> `engine_versions(id)`, ON DELETE RESTRICT
   - `move_evals_move_id_fkey`: `move_id` -> `moves(id)`, ON DELETE CASCADE
 - Unique constraints: none besides the primary key
-- Other constraints: NOT NULL on `move_id`, `eval_before_cp`, `eval_after_cp`, `best_uci`, `depth`, `engine_version_id`; no CHECK constraints
+- Other constraints: NOT NULL on `move_id`, `eval_before_cp`, `eval_after_cp`, `best_uci`, `depth`, `engine_version_id`
+- CHECK constraints: `move_evals_depth_check` `CHECK ((depth >= 0))`
 - Indexes:
   - `move_evals_pkey` btree (move_id): Primary key.
 
@@ -278,7 +290,8 @@ Forced-mate distances for the few moves where a mate exists, before and after th
 - Foreign keys:
   - `move_mates_move_id_fkey`: `move_id` -> `moves(id)`, ON DELETE CASCADE
 - Unique constraints: none besides the primary key
-- Other constraints: NOT NULL on `move_id`; no CHECK constraints
+- Other constraints: NOT NULL on `move_id`
+- CHECK constraints: none on this table
 - Indexes:
   - `move_mates_pkey` btree (move_id): Primary key.
 
@@ -294,7 +307,8 @@ Lookup of move classes: `best`, `good`, `inaccuracy`, `mistake`, `blunder` (seed
 - Primary key: `classifications_pkey` (id)
 - Foreign keys: none
 - Unique constraints: `classifications_name_key` (name)
-- Other constraints: NOT NULL on `id`, `name`; no CHECK constraints
+- Other constraints: NOT NULL on `id`, `name`
+- CHECK constraints: none on this table
 - Indexes:
   - `classifications_name_key` btree (name): Unique classification name.
   - `classifications_pkey` btree (id): Primary key.
@@ -314,7 +328,8 @@ Classification and centipawn loss of one move, derived from its evaluation. One-
   - `move_classifications_classification_id_fkey`: `classification_id` -> `classifications(id)`, ON DELETE RESTRICT
   - `move_classifications_move_id_fkey`: `move_id` -> `moves(id)`, ON DELETE CASCADE
 - Unique constraints: none besides the primary key
-- Other constraints: NOT NULL on `move_id`, `classification_id`, `cp_loss`; no CHECK constraints
+- Other constraints: NOT NULL on `move_id`, `classification_id`, `cp_loss`
+- CHECK constraints: `move_classifications_cp_loss_check` `CHECK ((cp_loss >= 0))`
 - Indexes:
   - `move_classifications_pkey` btree (move_id): Primary key.
 
@@ -330,7 +345,8 @@ Lookup of tactical motifs: `hanging_piece`, `fork`, `pin`, `skewer`, `back_rank`
 - Primary key: `motifs_pkey` (id)
 - Foreign keys: none
 - Unique constraints: `motifs_name_key` (name)
-- Other constraints: NOT NULL on `id`, `name`; no CHECK constraints
+- Other constraints: NOT NULL on `id`, `name`
+- CHECK constraints: none on this table
 - Indexes:
   - `motifs_name_key` btree (name): Unique motif name; `findPuzzlesForMotif` looks motifs up by name.
   - `motifs_pkey` btree (id): Primary key.
@@ -350,7 +366,8 @@ Link table between moves and motifs. `kind` is `allowed` (the move allowed the o
   - `move_motifs_motif_id_fkey`: `motif_id` -> `motifs(id)`, ON DELETE RESTRICT
   - `move_motifs_move_id_fkey`: `move_id` -> `moves(id)`, ON DELETE CASCADE
 - Unique constraints: none besides the primary key
-- Other constraints: NOT NULL on `move_id`, `motif_id`, `kind`; no CHECK constraints
+- Other constraints: NOT NULL on `move_id`, `motif_id`, `kind`
+- CHECK constraints: `move_motifs_kind_check` `CHECK ((kind IN ('allowed', 'missed')))`
 - Indexes:
   - `idx_move_motifs_motif_id` btree (motif_id): Joins and filters by motif. Added in migration `20261114161727_analytics_indexes` for [docs/explain/after/5_motif_weaknesses.txt](../docs/explain/after/5_motif_weaknesses.txt); kept for selective single-motif lookups at larger sizes ([docs/explain/README.md](../docs/explain/README.md)).
   - `move_motifs_pkey` btree (move_id, motif_id, kind): Primary key.
@@ -371,7 +388,8 @@ Puzzle bank imported from the Lichess puzzle CSV (`scripts/importPuzzles.js`). R
 - Primary key: `puzzles_pkey` (id)
 - Foreign keys: none
 - Unique constraints: `puzzles_lichess_id_key` (lichess_id)
-- Other constraints: NOT NULL on `id`, `lichess_id`, `fen`, `moves_uci`, `rating`; no CHECK constraints
+- Other constraints: NOT NULL on `id`, `lichess_id`, `fen`, `moves_uci`, `rating`
+- CHECK constraints: `puzzles_rating_check` `CHECK ((rating > 0))`
 - Indexes:
   - `puzzles_lichess_id_key` btree (lichess_id): Idempotent puzzle import by Lichess id.
   - `puzzles_pkey` btree (id): Primary key.
@@ -390,7 +408,8 @@ Link table between puzzles and motifs, from the puzzle themes column. Rows in th
   - `puzzle_motifs_motif_id_fkey`: `motif_id` -> `motifs(id)`, ON DELETE RESTRICT
   - `puzzle_motifs_puzzle_id_fkey`: `puzzle_id` -> `puzzles(id)`, ON DELETE CASCADE
 - Unique constraints: none besides the primary key
-- Other constraints: NOT NULL on `puzzle_id`, `motif_id`; no CHECK constraints
+- Other constraints: NOT NULL on `puzzle_id`, `motif_id`
+- CHECK constraints: none on this table
 - Indexes:
   - `puzzle_motifs_pkey` btree (puzzle_id, motif_id): Primary key.
 
@@ -408,7 +427,8 @@ A generated training plan of a user. Rows in the demo database: 2.
 - Foreign keys:
   - `training_plans_user_id_fkey`: `user_id` -> `users(id)`, ON DELETE CASCADE
 - Unique constraints: none besides the primary key
-- Other constraints: NOT NULL on `id`, `user_id`, `created_at`; no CHECK constraints
+- Other constraints: NOT NULL on `id`, `user_id`, `created_at`
+- CHECK constraints: none on this table
 - Indexes:
   - `training_plans_pkey` btree (id): Primary key.
 
@@ -431,7 +451,8 @@ One puzzle in a plan, the motif it trains (if any), why it was chosen (`reason_c
   - `training_plan_items_plan_id_fkey`: `plan_id` -> `training_plans(id)`, ON DELETE CASCADE
   - `training_plan_items_puzzle_id_fkey`: `puzzle_id` -> `puzzles(id)`, ON DELETE RESTRICT
 - Unique constraints: none besides the primary key
-- Other constraints: NOT NULL on `id`, `plan_id`, `puzzle_id`, `reason_code`; no CHECK constraints
+- Other constraints: NOT NULL on `id`, `plan_id`, `puzzle_id`, `reason_code`
+- CHECK constraints: none on this table
 - Indexes:
   - `training_plan_items_pkey` btree (id): Primary key.
 
@@ -461,7 +482,8 @@ Job queue. A job imports and analyses games of one account; workers claim jobs w
 - Foreign keys:
   - `analysis_jobs_player_account_id_fkey`: `player_account_id` -> `player_accounts(id)`, ON DELETE CASCADE
 - Unique constraints: `idx_analysis_jobs_active_unique` (player_account_id) WHERE (status = ANY (ARRAY['queued'::text, 'running'::text]))
-- Other constraints: NOT NULL on `id`, `player_account_id`, `status`, `attempts`, `max_games`, `failed_games`, `skipped_games`, `created_at`; no CHECK constraints
+- Other constraints: NOT NULL on `id`, `player_account_id`, `status`, `attempts`, `max_games`, `failed_games`, `skipped_games`, `created_at`
+- CHECK constraints: `analysis_jobs_attempts_check` `CHECK ((attempts >= 0))`; `analysis_jobs_failed_games_check` `CHECK ((failed_games >= 0))`; `analysis_jobs_max_games_check` `CHECK ((max_games > 0))`; `analysis_jobs_since_until_check` `CHECK (((since IS NULL) OR (until IS NULL) OR (since <= until)))`; `analysis_jobs_skipped_games_check` `CHECK ((skipped_games >= 0))`; `analysis_jobs_status_check` `CHECK ((status IN ('queued', 'running', 'completed', 'failed')))`
 - Indexes:
   - `analysis_jobs_pkey` btree (id): Primary key.
   - `analysis_jobs_status_created_at_idx` btree (status, created_at): Serves the claim query's `WHERE status = ... ORDER BY created_at` (DESIGN.md section 4).
@@ -483,7 +505,8 @@ Per-game progress of a job (`pending`, `analyzing`, `done`, `failed`) with the e
   - `analysis_job_games_game_id_fkey`: `game_id` -> `games(id)`, ON DELETE CASCADE
   - `analysis_job_games_job_id_fkey`: `job_id` -> `analysis_jobs(id)`, ON DELETE CASCADE
 - Unique constraints: none besides the primary key
-- Other constraints: NOT NULL on `job_id`, `game_id`, `status`; no CHECK constraints
+- Other constraints: NOT NULL on `job_id`, `game_id`, `status`
+- CHECK constraints: `analysis_job_games_status_check` `CHECK ((status IN ('pending', 'analyzing', 'done', 'failed')))`
 - Indexes:
   - `analysis_job_games_pkey` btree (job_id, game_id): Primary key.
 
@@ -509,7 +532,8 @@ Precomputed totals for one account (games, moves, inaccuracies, mistakes, blunde
 - Foreign keys:
   - `account_summary_player_account_id_fkey`: `player_account_id` -> `player_accounts(id)`, ON DELETE CASCADE
 - Unique constraints: none besides the primary key
-- Other constraints: NOT NULL on `player_account_id`, `total_games`, `analyzed_games`, `total_moves`, `inaccuracies`, `mistakes`, `blunders`, `avg_cp_loss`, `accuracy_pct`, `refreshed_at`; no CHECK constraints
+- Other constraints: NOT NULL on `player_account_id`, `total_games`, `analyzed_games`, `total_moves`, `inaccuracies`, `mistakes`, `blunders`, `avg_cp_loss`, `accuracy_pct`, `refreshed_at`
+- CHECK constraints: `account_summary_accuracy_pct_check` `CHECK (((accuracy_pct >= 0) AND (accuracy_pct <= 100)))`; `account_summary_analyzed_games_check` `CHECK ((analyzed_games >= 0))`; `account_summary_avg_cp_loss_check` `CHECK ((avg_cp_loss >= 0))`; `account_summary_blunders_check` `CHECK ((blunders >= 0))`; `account_summary_inaccuracies_check` `CHECK ((inaccuracies >= 0))`; `account_summary_mistakes_check` `CHECK ((mistakes >= 0))`; `account_summary_total_games_check` `CHECK ((total_games >= 0))`; `account_summary_total_moves_check` `CHECK ((total_moves >= 0))`
 - Indexes:
   - `account_summary_pkey` btree (player_account_id): Primary key.
 
@@ -530,7 +554,8 @@ Precomputed moves, blunders and average loss for one account and phase. Derived;
   - `account_phase_summary_phase_id_fkey`: `phase_id` -> `phases(id)`, ON DELETE CASCADE
   - `account_phase_summary_player_account_id_fkey`: `player_account_id` -> `player_accounts(id)`, ON DELETE CASCADE
 - Unique constraints: none besides the primary key
-- Other constraints: NOT NULL on `player_account_id`, `phase_id`, `moves`, `blunders`, `avg_cp_loss`; no CHECK constraints
+- Other constraints: NOT NULL on `player_account_id`, `phase_id`, `moves`, `blunders`, `avg_cp_loss`
+- CHECK constraints: `account_phase_summary_avg_cp_loss_check` `CHECK ((avg_cp_loss >= 0))`; `account_phase_summary_blunders_check` `CHECK ((blunders >= 0))`; `account_phase_summary_moves_check` `CHECK ((moves >= 0))`
 - Indexes:
   - `account_phase_summary_pkey` btree (player_account_id, phase_id): Primary key.
 

@@ -1,6 +1,6 @@
 # 6. Queries
 
-`DE/queries.sql` holds 16 project-specific queries. This file explains each one and shows its real output.
+`DE/queries.sql` holds 17 project-specific queries. This file explains each one and shows its real output.
 
 ## How the outputs were produced
 
@@ -13,7 +13,7 @@
   ```
 
   Running the whole file at once (`-f - < DE/queries.sql`) gives the same results in one session.
-- Every query that changes data (Q01, Q02, Q03, Q12, Q13, Q15, Q16) runs inside `BEGIN; ... ROLLBACK;` in the same session, so the demo data is left unchanged. The only lasting effect is that sequences advance (for example the ids 3, 82, 4 and 5 that appear in Q01, Q02 and Q12 are not reused), because PostgreSQL does not roll sequences back. Ids and timestamps in those outputs will differ on another run.
+- Every query that changes data (Q01, Q02, Q03, Q12, Q13, Q15, Q16, Q17) runs inside `BEGIN; ... ROLLBACK;` in the same session, so the demo data is left unchanged. The only lasting effect is that sequences advance (for example the ids 3, 82, 4 and 5 that appear in Q01, Q02 and Q12 are not reused), because PostgreSQL does not roll sequences back. Ids and timestamps in those outputs will differ on another run.
 - psql prints the command tag (`BEGIN`, `INSERT 0 1`, `UPDATE 1`, `ROLLBACK`) after each statement and the row count `(n rows)` after each result.
 
 Coverage of the required query types:
@@ -34,6 +34,7 @@ Coverage of the required query types:
 | `FOR UPDATE SKIP LOCKED` | Q12 |
 | Upsert `ON CONFLICT DO UPDATE` and consistency check | Q13 |
 | Constraint violations (unique, partial unique, foreign key) | Q16 |
+| CHECK constraint violations | Q17 |
 
 ## Queries
 
@@ -1076,6 +1077,115 @@ DETAIL:  Key (game_id)=(999999) is not present in table "games".
 ROLLBACK
 ```
 
+### Q17. CHECK constraints: values outside the allowed sets are rejected by the database
+
+**Business question.** Does the database itself reject a status, colour or value that the application would never write?
+
+**Feature and code.** Every writer of these columns: `insertGameWithMoves` and `saveGameAnalysis` (`src/repositories/moveBulk.repo.js`), `createImportJob` (`src/services/import.service.js`), the job queue (`src/workers/jobQueue.js`). The constraints come from migration `20261122161952_add_check_constraints`; `tests/schema.checks.test.js` tests ten of them.
+
+```sql
+-- (a) a game colour that is neither white nor black
+BEGIN;
+UPDATE games SET color = 'red' WHERE id = 32;
+ROLLBACK;
+
+-- (b) an analysis job with an unknown status
+BEGIN;
+INSERT INTO analysis_jobs (player_account_id, status) VALUES (2, 'cancelled');
+ROLLBACK;
+
+-- (c) a negative centipawn loss
+BEGIN;
+UPDATE move_classifications SET cp_loss = -5
+WHERE move_id = (SELECT MIN(m.id) FROM moves m WHERE m.game_id = 32);
+ROLLBACK;
+
+-- (d) the same kind of write with an allowed value is accepted
+BEGIN;
+UPDATE games SET color = 'black' WHERE id = 32 RETURNING id, color;
+ROLLBACK;
+
+-- All CHECK constraints in the schema
+SELECT conrelid::regclass AS table_name, conname, pg_get_constraintdef(oid) AS definition
+FROM pg_constraint
+WHERE contype = 'c' AND connamespace = 'public'::regnamespace
+ORDER BY 1, 2;
+```
+
+**Explanation.**
+
+1. (a) Setting the colour of game 32 to `red` fails on `games_color_check`; `DETAIL` shows the row that was refused.
+2. (b) A job with status `cancelled` fails on `analysis_jobs_status_check` (allowed: `queued`, `running`, `completed`, `failed`). The job id in `DETAIL` was taken from the sequence even though the row was refused.
+3. (c) A negative `cp_loss` fails on `move_classifications_cp_loss_check`.
+4. (d) The same kind of update with an allowed value (`black`) succeeds, so the constraint only blocks values outside the set.
+5. Each write runs in its own `BEGIN ... ROLLBACK`; nothing is changed.
+6. The last query lists all CHECK constraints of the schema from `pg_constraint` (`contype = 'c'`), 37 rows.
+
+**Output** (psql, demo database):
+
+```
+BEGIN
+psql:<stdin>:4: ERROR:  new row for relation "games" violates check constraint "games_color_check"
+DETAIL:  Failing row contains (32, 2, 1, MD031pzB, 2025-10-11 19:38:53, red, 2, 266, 4, 2842, 2779, 61, analyzed, null).
+ROLLBACK
+BEGIN
+psql:<stdin>:9: ERROR:  new row for relation "analysis_jobs" violates check constraint "analysis_jobs_status_check"
+DETAIL:  Failing row contains (13, 2, cancelled, 0, 50, null, null, null, null, null, null, 0, 0, 2026-11-22 16:24:32.817, null).
+ROLLBACK
+BEGIN
+psql:<stdin>:15: ERROR:  new row for relation "move_classifications" violates check constraint "move_classifications_cp_loss_check"
+DETAIL:  Failing row contains (2379, 1, -5).
+ROLLBACK
+BEGIN
+ id | color 
+----+-------
+ 32 | black
+(1 row)
+
+UPDATE 1
+ROLLBACK
+      table_name       |                 conname                 |                                                        definition                                                         
+-----------------------+-----------------------------------------+---------------------------------------------------------------------------------------------------------------------------
+ time_controls         | time_controls_base_seconds_check        | CHECK ((base_seconds >= 0))
+ time_controls         | time_controls_category_check            | CHECK ((category = ANY (ARRAY['bullet'::text, 'blitz'::text, 'rapid'::text, 'classical'::text, 'correspondence'::text])))
+ time_controls         | time_controls_increment_seconds_check   | CHECK ((increment_seconds >= 0))
+ games                 | games_analysis_status_check             | CHECK ((analysis_status = ANY (ARRAY['pending'::text, 'analyzed'::text, 'failed'::text])))
+ games                 | games_color_check                       | CHECK ((color = ANY (ARRAY['white'::text, 'black'::text])))
+ games                 | games_opponent_rating_check             | CHECK (((opponent_rating IS NULL) OR (opponent_rating >= 0)))
+ games                 | games_player_rating_check               | CHECK (((player_rating IS NULL) OR (player_rating >= 0)))
+ games                 | games_total_plies_check                 | CHECK ((total_plies >= 0))
+ moves                 | moves_clock_remaining_ms_check          | CHECK (((clock_remaining_ms IS NULL) OR (clock_remaining_ms >= 0)))
+ moves                 | moves_mover_color_check                 | CHECK ((mover_color = ANY (ARRAY['white'::text, 'black'::text])))
+ moves                 | moves_ply_check                         | CHECK ((ply > 0))
+ moves                 | moves_time_spent_ms_check               | CHECK (((time_spent_ms IS NULL) OR (time_spent_ms >= 0)))
+ engine_versions       | engine_versions_default_depth_check     | CHECK ((default_depth > 0))
+ engine_versions       | engine_versions_hash_size_check         | CHECK ((hash_size > 0))
+ engine_versions       | engine_versions_threads_check           | CHECK ((threads > 0))
+ move_evals            | move_evals_depth_check                  | CHECK ((depth >= 0))
+ move_classifications  | move_classifications_cp_loss_check      | CHECK ((cp_loss >= 0))
+ move_motifs           | move_motifs_kind_check                  | CHECK ((kind = ANY (ARRAY['allowed'::text, 'missed'::text])))
+ puzzles               | puzzles_rating_check                    | CHECK ((rating > 0))
+ analysis_jobs         | analysis_jobs_attempts_check            | CHECK ((attempts >= 0))
+ analysis_jobs         | analysis_jobs_failed_games_check        | CHECK ((failed_games >= 0))
+ analysis_jobs         | analysis_jobs_max_games_check           | CHECK ((max_games > 0))
+ analysis_jobs         | analysis_jobs_since_until_check         | CHECK (((since IS NULL) OR (until IS NULL) OR (since <= until)))
+ analysis_jobs         | analysis_jobs_skipped_games_check       | CHECK ((skipped_games >= 0))
+ analysis_jobs         | analysis_jobs_status_check              | CHECK ((status = ANY (ARRAY['queued'::text, 'running'::text, 'completed'::text, 'failed'::text])))
+ analysis_job_games    | analysis_job_games_status_check         | CHECK ((status = ANY (ARRAY['pending'::text, 'analyzing'::text, 'done'::text, 'failed'::text])))
+ account_summary       | account_summary_accuracy_pct_check      | CHECK (((accuracy_pct >= (0)::double precision) AND (accuracy_pct <= (100)::double precision)))
+ account_summary       | account_summary_analyzed_games_check    | CHECK ((analyzed_games >= 0))
+ account_summary       | account_summary_avg_cp_loss_check       | CHECK ((avg_cp_loss >= (0)::double precision))
+ account_summary       | account_summary_blunders_check          | CHECK ((blunders >= 0))
+ account_summary       | account_summary_inaccuracies_check      | CHECK ((inaccuracies >= 0))
+ account_summary       | account_summary_mistakes_check          | CHECK ((mistakes >= 0))
+ account_summary       | account_summary_total_games_check       | CHECK ((total_games >= 0))
+ account_summary       | account_summary_total_moves_check       | CHECK ((total_moves >= 0))
+ account_phase_summary | account_phase_summary_avg_cp_loss_check | CHECK ((avg_cp_loss >= (0)::double precision))
+ account_phase_summary | account_phase_summary_blunders_check    | CHECK ((blunders >= 0))
+ account_phase_summary | account_phase_summary_moves_check       | CHECK ((moves >= 0))
+(37 rows)
+```
+
 ## Execution plans
 
 Two analytic reads were run with `EXPLAIN (ANALYZE, BUFFERS)` on the demo database.
@@ -1230,7 +1340,7 @@ The summary read is one primary-key lookup on `account_summary_pkey` (2 buffers,
 
 ## Check that the demo data is unchanged
 
-After all queries had run, the row counts of all tables were compared with the counts taken at the start (`05_sample_records.md`) with `diff`, which printed nothing:
+After all queries had run, the row counts of all tables were compared with `diff` against the counts taken just before the run, which printed nothing (`_prisma_migrations` has 7 rows since the CHECK constraint migration; the data tables have the counts listed in `05_sample_records.md`):
 
 ```
       table_name       | rows  
@@ -1252,7 +1362,7 @@ After all queries had run, the row counts of all tables were compared with the c
  phases                |     3
  platforms             |     3
  player_accounts       |     2
- _prisma_migrations    |     6
+ _prisma_migrations    |     7
  puzzle_motifs         | 16600
  puzzles               | 50000
  results               |     3

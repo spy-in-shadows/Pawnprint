@@ -88,11 +88,17 @@ A 10,000-game run with the UNNEST path inserted 400,000 moves in 52.92 s (7,559 
 | Unique keys: `users(email)`, `player_accounts(platform_id, username)`, `games(platform_id, external_id)`, `moves(game_id, ply)`, natural keys of all lookups, `puzzles(lichess_id)` | `04_final_schema.md` |
 | Partial unique index: one active job per account | `idx_analysis_jobs_active_unique`, query Q16b |
 | NOT NULL on every column that must have a value; nullable only where "unknown" is real (`opening_id`, `time_control_id`, ratings, clocks, `last_synced_at`, mate distances) | `04_final_schema.md` |
+| 37 CHECK constraints: allowed values of `games.color`, `moves.mover_color`, `games.analysis_status`, `analysis_jobs.status`, `analysis_job_games.status`, `move_motifs.kind`, `time_controls.category`; ranges for plies, clocks, ratings, `cp_loss`, depth, engine settings, job counters, the job date window (`since <= until`) and the summary columns (counts and averages `>= 0`, `accuracy_pct` between 0 and 100) | migration `20261122161952_add_check_constraints`, `04_final_schema.md`, `tests/schema.checks.test.js`, query Q17 |
 | One transaction per game for the import and one for the analysis | `insertGameWithMoves`, `saveGameAnalysis`; `tests/moveBulk.test.js` "rollback leaves zero rows when a later step fails" |
 | Idempotent imports: `ON CONFLICT (platform_id, external_id) DO NOTHING`, evaluation inserts `ON CONFLICT (move_id) DO NOTHING` | `tests/moveBulk.test.js` "re-inserting the same game is idempotent (isNew false)", "saveGameAnalysis twice creates no duplicates and sets the status"; query Q01 |
 | Failed games are kept with a reason, not dropped | `games.analysis_status = 'failed'` with `failure_reason`, `analysis_job_games.error`; `tests/jobRunner.test.js` "fails only the game with an illegal move and completes the job with failedGames 1" |
 | Validation before the database: email format and password length (`auth.service.js`), platform and username (`account.service.js`), dates and `since <= until` (`import.service.js`, `analytics.service.js`), integer ids up to 2,147,483,647 (`parseIntId`), PGN file type and 5 MB limit (`uploads.routes.js`) | `tests/auth.test.js`, `tests/accounts.test.js`, `tests/import.service.test.js` "rejects invalid or reversed dates ...", `tests/uploads.test.js` |
 | Data-quality checks after every job: `analyzed_games_have_all_evals`, `plies_contiguous`, `every_eval_has_classification`, `eval_ranges`, `mate_rows_consistent`, `failed_games_have_reason`, `no_orphan_progress`, `one_active_job_per_account`, `engine_versions_unreferenced_dupes` | `src/workers/dataQuality.js`, `npm run dq`, `tests/dataQuality.test.js` |
+
+Which rules live where:
+
+- **Enforced by PostgreSQL:** keys, foreign keys, NOT NULL, the partial unique index and the CHECK constraints above. Any writer, including a manual `psql` session or a faulty script, is held to them; a violation fails with SQLSTATE 23514 (CHECK), 23505 (unique) or 23503 (foreign key).
+- **Still enforced only in application code:** email format and password length; valid platform names when linking (the `platforms` foreign key also rejects unknown ids); the clamp of `max_games` to 1 to 500 (the database only requires `> 0`); the format of `training_plan_items.reason_code`; the pairing of depth 0 with `best_uci = 'none'` for terminal positions (reported by the data-quality check `eval_ranges`); one name per ECO code; the rule that a game's `platform_id` equals its account's platform; and the chess-rule consistency of `moves` (`mover_color` against ply parity and the FEN, SAN against UCI). These span rows or tables, or need chess logic, so they stay in the parser, the services and the data-quality checks.
 
 ## 8.6 Duplicate, missing and invalid data
 
@@ -114,6 +120,6 @@ Indexes follow the access paths, and the write-heavy move tables are kept lean. 
 ## 8.9 Honest limits
 
 - The evidence for scale comes from synthetic benchmark data on one laptop (`docs/benchmarks/`), not from production traffic.
-- Value columns such as statuses, colours and motif kinds have no `CHECK` constraints; the `(0, 0)` time control has two meanings; `openings` does not enforce one name per ECO code; partial PGN dates fall back to the import time (`03_normalization.md` section 3.7, `07_integration_evidence.md` section 7.4).
+- Some value rules are enforced only by the application (section 8.5); the `(0, 0)` time control has two meanings; `openings` does not enforce one name per ECO code; partial PGN dates fall back to the import time (`03_normalization.md` section 3.7, `07_integration_evidence.md` section 7.4).
 - Analytics other than the summary aggregate the base tables on every request, so their cost grows with the number of games of the user.
 - Users cannot be deleted through the API, only accounts.

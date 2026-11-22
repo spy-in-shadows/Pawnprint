@@ -11,7 +11,7 @@ This folder documents the database of Pawnprint (Longitudinal Chess Analytics En
 | 3 | Normalization up to 3NF | [`03_normalization.md`](03_normalization.md) |
 | 4 | Final schema | [`04_final_schema.md`](04_final_schema.md), [`schema.sql`](schema.sql) (DDL dump of the live database) |
 | 5 | Sample records | [`05_sample_records.md`](05_sample_records.md), [`sample_data/`](sample_data/) (one CSV per table, 24 files) |
-| 6 | Queries | [`06_queries.md`](06_queries.md), [`queries.sql`](queries.sql) (16 queries) |
+| 6 | Queries | [`06_queries.md`](06_queries.md), [`queries.sql`](queries.sql) (17 queries) |
 | 7 | Integration with the application | [`07_integration_evidence.md`](07_integration_evidence.md) |
 | 8 | Architecture and design decisions | [`08_architecture_and_decisions.md`](08_architecture_and_decisions.md) |
 
