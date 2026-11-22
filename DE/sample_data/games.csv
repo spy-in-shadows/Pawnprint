@@ -1,0 +1,6 @@
+id,player_account_id,platform_id,external_id,played_at,color,result_id,opening_id,time_control_id,player_rating,opponent_rating,total_plies,analysis_status,failure_reason
+1,1,1,HqjDTU4A,2026-10-14 18:04:06,white,1,77,4,3177,2848,91,analyzed,
+2,1,1,iVshKPMF,2026-10-14 18:02:18,black,1,308,4,3177,2230,34,analyzed,
+3,1,1,J3C5rR4Z,2026-10-14 18:00:01,black,1,169,4,3153,2853,36,analyzed,
+4,1,1,zR8HRccT,2026-10-06 15:42:25,white,1,1,1,3254,3029,127,analyzed,
+20,1,1,G3tGP3Qv,2026-03-17 23:05:19,black,1,147,1,3277,3015,74,analyzed,
