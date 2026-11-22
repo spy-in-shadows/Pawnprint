@@ -547,12 +547,13 @@ Counting the constraint types in the live database:
 $ docker compose -p pawnprint-demo exec -T db psql -U chess -d chess_analytics -c "SELECT contype, COUNT(*) FROM pg_constraint WHERE connamespace = 'public'::regnamespace AND conrelid::regclass::text <> '_prisma_migrations' GROUP BY contype ORDER BY contype"
  contype | count 
 ---------+-------
+ c       |    37
  f       |    28
  p       |    24
-(2 rows)
+(3 rows)
 ```
 
-`f` is a foreign key and `p` a primary key. Unique rules are unique indexes (they appear in `pg_indexes`, see `04_final_schema.md`). There are no `CHECK` constraints (`c`); see "Known limitations" in `03_normalization.md`.
+`c` is a CHECK constraint, `f` a foreign key and `p` a primary key. The 37 CHECK constraints come from migration `20261122161952_add_check_constraints` and are listed per table in `04_final_schema.md`; they do not change the diagram, which shows keys and relationships. Unique rules are unique indexes (they appear in `pg_indexes`, see `04_final_schema.md`).
 
 Two examples of `\d` output for the one-to-one and link-table patterns:
 

@@ -517,3 +517,31 @@ INSERT INTO moves (game_id, ply, san, uci, fen_before, mover_color, phase_id)
 VALUES (999999, 1, 'e4', 'e2e4',
         'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1', 'white', 1);
 ROLLBACK;
+
+-- Q17. CHECK constraints: values outside the allowed sets are rejected by the database
+-- (a) a game colour that is neither white nor black
+BEGIN;
+UPDATE games SET color = 'red' WHERE id = 32;
+ROLLBACK;
+
+-- (b) an analysis job with an unknown status
+BEGIN;
+INSERT INTO analysis_jobs (player_account_id, status) VALUES (2, 'cancelled');
+ROLLBACK;
+
+-- (c) a negative centipawn loss
+BEGIN;
+UPDATE move_classifications SET cp_loss = -5
+WHERE move_id = (SELECT MIN(m.id) FROM moves m WHERE m.game_id = 32);
+ROLLBACK;
+
+-- (d) the same kind of write with an allowed value is accepted
+BEGIN;
+UPDATE games SET color = 'black' WHERE id = 32 RETURNING id, color;
+ROLLBACK;
+
+-- All CHECK constraints in the schema
+SELECT conrelid::regclass AS table_name, conname, pg_get_constraintdef(oid) AS definition
+FROM pg_constraint
+WHERE contype = 'c' AND connamespace = 'public'::regnamespace
+ORDER BY 1, 2;
