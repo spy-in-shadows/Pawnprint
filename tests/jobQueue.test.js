@@ -155,8 +155,9 @@ describe('jobQueue', () => {
       },
     });
 
-    const pending = await updateGameProgress(job.id, game.id, 'running');
-    expect(pending).toEqual({ jobId: job.id, gameId: game.id, status: 'running', error: null });
+    // 'analyzing' is the in-progress value of the docs/CONTRACTS.md set; analysis_job_games_status_check rejects others.
+    const pending = await updateGameProgress(job.id, game.id, 'analyzing');
+    expect(pending).toEqual({ jobId: job.id, gameId: game.id, status: 'analyzing', error: null });
 
     const failed = await updateGameProgress(job.id, game.id, 'failed', 'illegal move at ply 7');
     expect(failed).toEqual({

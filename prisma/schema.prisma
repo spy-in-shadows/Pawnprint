@@ -56,6 +56,9 @@ model Result {
   @@map("results")
 }
 
+// CHECK constraints (migration 20261122161952_add_check_constraints; Prisma does not model them):
+// time_controls_category_check (bullet, blitz, rapid, classical, correspondence),
+// time_controls_base_seconds_check and time_controls_increment_seconds_check (>= 0)
 model TimeControl {
   id               Int    @id @default(autoincrement())
   baseSeconds      Int    @map("base_seconds")
@@ -77,6 +80,9 @@ model Opening {
   @@map("openings")
 }
 
+// CHECK constraints (migration 20261122161952_add_check_constraints; Prisma does not model them):
+// games_color_check (white, black), games_analysis_status_check (pending, analyzed, failed),
+// games_total_plies_check (>= 0), games_player_rating_check and games_opponent_rating_check (NULL or >= 0)
 model Game {
   id             Int       @id @default(autoincrement())
   playerAccountId Int      @map("player_account_id")
@@ -115,6 +121,9 @@ model Phase {
   @@map("phases")
 }
 
+// CHECK constraints (migration 20261122161952_add_check_constraints; Prisma does not model them):
+// moves_mover_color_check (white, black), moves_ply_check (> 0),
+// moves_clock_remaining_ms_check and moves_time_spent_ms_check (NULL or >= 0)
 model Move {
   id               Int                 @id @default(autoincrement())
   gameId           Int                 @map("game_id")
@@ -139,6 +148,8 @@ model Move {
 }
 
 // Engine version rows are immutable by design
+// CHECK constraints (migration 20261122161952_add_check_constraints; Prisma does not model them):
+// engine_versions_default_depth_check, engine_versions_threads_check, engine_versions_hash_size_check (> 0)
 model EngineVersion {
   id           Int        @id @default(autoincrement())
   name         String
@@ -152,6 +163,8 @@ model EngineVersion {
   @@map("engine_versions")
 }
 
+// CHECK constraints (migration 20261122161952_add_check_constraints; Prisma does not model them):
+// move_evals_depth_check (>= 0; terminal positions are stored with depth 0)
 model MoveEval {
   moveId          Int           @id @map("move_id")
   evalBeforeCp    Int           @map("eval_before_cp")
@@ -185,6 +198,8 @@ model Classification {
   @@map("classifications")
 }
 
+// CHECK constraints (migration 20261122161952_add_check_constraints; Prisma does not model them):
+// move_classifications_cp_loss_check (>= 0)
 model MoveClassification {
   moveId           Int            @id @map("move_id")
   classificationId Int            @map("classification_id")
@@ -206,6 +221,8 @@ model Motif {
   @@map("motifs")
 }
 
+// CHECK constraints (migration 20261122161952_add_check_constraints; Prisma does not model them):
+// move_motifs_kind_check (allowed, missed)
 model MoveMotif {
   moveId  Int    @map("move_id")
   motifId Int    @map("motif_id")
@@ -220,6 +237,8 @@ model MoveMotif {
   @@map("move_motifs")
 }
 
+// CHECK constraints (migration 20261122161952_add_check_constraints; Prisma does not model them):
+// puzzles_rating_check (> 0)
 model Puzzle {
   id                Int                @id @default(autoincrement())
   lichessId         String             @unique @map("lichess_id")
@@ -272,6 +291,10 @@ model TrainingPlanItem {
 
 // Partial unique index idx_analysis_jobs_active_unique enforces one active import job per account.
 // All raw SQL timestamp columns must use (NOW() AT TIME ZONE 'UTC').
+// CHECK constraints (migration 20261122161952_add_check_constraints; Prisma does not model them):
+// analysis_jobs_status_check (queued, running, completed, failed), analysis_jobs_attempts_check,
+// analysis_jobs_failed_games_check, analysis_jobs_skipped_games_check (>= 0), analysis_jobs_max_games_check (> 0),
+// analysis_jobs_since_until_check (since <= until when both are set)
 model AnalysisJob {
   id              Int               @id @default(autoincrement())
   playerAccountId Int               @map("player_account_id")
@@ -296,6 +319,8 @@ model AnalysisJob {
   @@map("analysis_jobs")
 }
 
+// CHECK constraints (migration 20261122161952_add_check_constraints; Prisma does not model them):
+// analysis_job_games_status_check (pending, analyzing, done, failed)
 model AnalysisJobGame {
   jobId  Int         @map("job_id")
   gameId Int         @map("game_id")
@@ -309,6 +334,8 @@ model AnalysisJobGame {
   @@map("analysis_job_games")
 }
 
+// CHECK constraints (migration 20261122161952_add_check_constraints; Prisma does not model them):
+// account_summary_<column>_check: all counts and avg_cp_loss >= 0, accuracy_pct between 0 and 100
 model AccountSummary {
   playerAccountId Int           @id @map("player_account_id")
   totalGames      Int           @map("total_games")
@@ -327,6 +354,8 @@ model AccountSummary {
   @@map("account_summary")
 }
 
+// CHECK constraints (migration 20261122161952_add_check_constraints; Prisma does not model them):
+// account_phase_summary_<column>_check: moves, blunders and avg_cp_loss >= 0
 model AccountPhaseSummary {
   playerAccountId Int           @map("player_account_id")
   phaseId         Int           @map("phase_id")
