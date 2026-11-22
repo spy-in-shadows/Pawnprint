@@ -1,0 +1,11 @@
+id,base_seconds,increment_seconds,category
+1,60,0,bullet
+2,60,1,bullet
+3,120,1,bullet
+4,180,0,blitz
+5,180,2,blitz
+6,300,0,blitz
+7,300,3,blitz
+8,600,0,rapid
+9,600,5,rapid
+10,900,10,rapid

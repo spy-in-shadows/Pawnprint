@@ -1,0 +1,3 @@
+id,player_account_id,status,attempts,max_games,since,until,locked_at,heartbeat_at,error,failed_games,skipped_games,created_at,finished_at
+1,1,completed,1,30,,,2026-11-15 05:06:21.817,2026-11-15 05:07:11.823,,0,0,2026-11-15 05:06:21.116,2026-11-15 05:07:22.702
+2,1,completed,1,10,,,2026-11-15 05:08:45.143,2026-11-15 05:08:45.148,,0,0,2026-11-15 05:08:44.351,2026-11-15 05:08:45.564

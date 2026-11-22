@@ -1,0 +1,4 @@
+player_account_id,phase_id,moves,blunders,avg_cp_loss
+1,1,293,0,15.2
+1,2,531,14,37.7
+1,3,370,3,28.3

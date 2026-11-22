@@ -1,0 +1,9 @@
+id,game_id,ply,san,uci,fen_before,mover_color,clock_remaining_ms,time_spent_ms,phase_id
+1626,20,67,Rf1,h1f1,6k1/5p2/3pp1n1/pp4P1/2b1P3/r2BK1P1/2P4R/7R w - - 0 34,white,27000,2000,3
+1627,20,68,Ne5,g6e5,6k1/5p2/3pp1n1/pp4P1/2b1P3/r2BK1P1/2P4R/5R2 b - - 1 34,black,27000,2000,3
+1628,20,69,Rd1,f1d1,6k1/5p2/3pp3/pp2n1P1/2b1P3/r2BK1P1/2P4R/5R2 w - - 2 35,white,26000,1000,3
+1629,20,70,Ng4+,e5g4,6k1/5p2/3pp3/pp2n1P1/2b1P3/r2BK1P1/2P4R/3R4 b - - 3 35,black,26000,1000,3
+1630,20,71,Kf4,e3f4,6k1/5p2/3pp3/pp4P1/2b1P1n1/r2BK1P1/2P4R/3R4 w - - 4 36,white,23000,3000,3
+1631,20,72,Nxh2,g4h2,6k1/5p2/3pp3/pp4P1/2b1PKn1/r2B2P1/2P4R/3R4 b - - 5 36,black,26000,0,3
+1632,20,73,Bxc4,d3c4,6k1/5p2/3pp3/pp4P1/2b1PK2/r2B2P1/2P4n/3R4 w - - 0 37,white,23000,0,3
+1633,20,74,Rf3#,a3f3,6k1/5p2/3pp3/pp4P1/2B1PK2/r5P1/2P4n/3R4 b - - 0 37,black,25000,1000,3

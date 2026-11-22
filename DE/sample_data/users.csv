@@ -1,0 +1,2 @@
+id,email,password_hash,created_at
+1,demo@example.com,<hash omitted>,2026-11-15 05:03:51.763
