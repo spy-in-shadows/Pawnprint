@@ -60,7 +60,7 @@ SELECT id, email, '<hash omitted>' AS password_hash, created_at FROM users WHERE
 
 | `id` | `email` | `password_hash` | `created_at` |
 |---|---|---|---|
-| 1 | demo@example.com | <hash omitted> | 2026-11-15 05:03:51.763 |
+| 1 | demo@example.com | `<hash omitted>` | 2026-11-15 05:03:51.763 |
 
 ### 5.2 `platforms` (3 rows, file [`sample_data/platforms.csv`](sample_data/platforms.csv))
 
