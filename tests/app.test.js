@@ -175,3 +175,43 @@ describe('CORS allowlist', () => {
     }
   });
 });
+
+describe('client index resolution', () => {
+  it('checks for index.html when the app is created, not on each request', async () => {
+    const fs = (await import('fs')).default;
+    const os = (await import('os')).default;
+    const path = (await import('path')).default;
+    const dist = fs.mkdtempSync(path.join(os.tmpdir(), 'pawnprint-index-'));
+    fs.writeFileSync(path.join(dist, 'index.html'), '<!doctype html><p>root</p>');
+    const server = await listen(createApp({ clientDistPath: dist }));
+    const spy = vi.spyOn(fs, 'existsSync');
+    try {
+      for (const route of ['/dashboard', '/games/1', '/training']) {
+        const res = await fetch(`${baseUrl(server)}${route}`);
+        expect(res.status).toBe(200);
+        expect(await res.text()).toContain('root');
+      }
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+      await new Promise((resolve) => server.close(resolve));
+      fs.rmSync(dist, { recursive: true, force: true });
+    }
+  });
+
+  it('without index.html, SPA routes fall through to the JSON 404', async () => {
+    const fs = (await import('fs')).default;
+    const os = (await import('os')).default;
+    const path = (await import('path')).default;
+    const dist = fs.mkdtempSync(path.join(os.tmpdir(), 'pawnprint-noindex-'));
+    const server = await listen(createApp({ clientDistPath: dist }));
+    try {
+      const res = await fetch(`${baseUrl(server)}/dashboard`);
+      expect(res.status).toBe(404);
+      expect((await res.json()).error.code).toBe('NOT_FOUND');
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+      fs.rmSync(dist, { recursive: true, force: true });
+    }
+  });
+});
