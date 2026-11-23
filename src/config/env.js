@@ -7,6 +7,16 @@ for (const key of required) {
   }
 }
 
+// CORS_ORIGINS: comma-separated list of origins allowed to call the API from another origin
+// (for example http://localhost:5173 for the Vite dev server). Empty by default, which means
+// same-origin only: the API serves the built client itself, so production needs no entries.
+function parseList(value) {
+  return (value || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 const config = {
   port: Number(process.env.PORT) || 3000,
   nodeEnv: process.env.NODE_ENV || 'development',
@@ -20,6 +30,7 @@ const config = {
   pgPoolMax: Number(process.env.PG_POOL_MAX) || 10,
   logLevel: process.env.LOG_LEVEL || 'info',
   jobStaleSeconds: Number(process.env.JOB_STALE_SECONDS) || 120,
+  corsOrigins: parseList(process.env.CORS_ORIGINS),
 };
 
 export default config;
