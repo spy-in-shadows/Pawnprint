@@ -14,7 +14,9 @@ import * as healthController from './controllers/health.controller.js';
 export function createApp(options = {}) {
   const app = express();
 
-  // 0. Security headers, before anything else so every response (API, static, errors) carries them.
+  // Order matters; each step says why it sits where it does.
+
+  // 1. helmet first: every response, including 429s, 404s and errors, carries the security headers.
   // The built client loads one module script and one stylesheet from /assets and sets styles only
   // through the DOM (React style props), so no 'unsafe-inline' is needed. data: images are used by
   // the drag preview of the board.
@@ -38,9 +40,17 @@ export function createApp(options = {}) {
     })
   );
 
-  // CORS: only origins listed in CORS_ORIGINS get Access-Control-Allow-Origin. With the default empty
-  // list no cross-origin caller is allowed; same-origin requests from the served client are unaffected.
-  // Auth uses Bearer tokens, not cookies, so credentials stay off.
+  // 2. Request logger next, so rejected requests (rate limited, CORS, bad JSON) are logged too.
+  app.use(requestLogger);
+
+  // 3. Root health check before the limiters: load balancers and uptime probes must never get 429.
+  app.get('/health', healthController.check);
+
+  // 4. CORS before the rate limiters: a 429 must carry Access-Control-Allow-Origin, otherwise a
+  // browser on an allowed origin sees an opaque CORS failure instead of the 429. Preflights are
+  // answered here and never reach the limiters or the body parser.
+  // Only origins in CORS_ORIGINS are allowed (empty default = same-origin only). Credentials stay off:
+  // the API authenticates with Bearer tokens; the refresh cookie is same-origin only.
   const allowedOrigins = new Set(options.corsOrigins ?? config.corsOrigins);
   // The refresh/logout CSRF check accepts the same list (src/middleware/csrf.js).
   app.locals.allowedOrigins = allowedOrigins;
@@ -53,26 +63,21 @@ export function createApp(options = {}) {
     })
   );
 
-  // 1. Request logger
-  app.use(requestLogger);
-
-  // Root health endpoint (unauthenticated)
-  app.get('/health', healthController.check);
-
-  // 2. Body parser
-  app.use(express.json({ limit: '1mb' }));
-  app.use(cookieParser());
-
-  // 3. Rate limiters
+  // 5. Rate limiters before any body parsing: a client over its limit is rejected without the
+  // server reading or parsing up to 1 MB of JSON for it.
   const apiLimiter = options.apiRateLimiter ?? apiRateLimiter;
   const authLimiter = options.authRateLimiter ?? authRateLimiter;
   app.use('/api', apiLimiter);
   app.use('/api/v1/auth', authLimiter);
 
-  // 4. API v1 router
+  // 6. Body and cookie parsing only for requests that passed the limiters, right before the routes.
+  app.use(express.json({ limit: '1mb' }));
+  app.use(cookieParser());
+
+  // 7. API routes before static files, so /api paths are never shadowed by files in client/dist.
   app.use('/api/v1', v1Router);
 
-  // 5. Static client serving with SPA fallback for non-/api GET routes
+  // 8. Static client and SPA fallback after the API, for every remaining non-/api GET.
   const clientDist = options.clientDistPath ?? path.resolve(process.cwd(), 'client/dist');
   // Both checks run once here, not per request; rebuild the client before starting the server.
   if (fs.existsSync(clientDist)) {
@@ -88,10 +93,10 @@ export function createApp(options = {}) {
     }
   }
 
-  // 6. 404 handler (API routes never fall through to index.html)
+  // 9. 404 after everything that can answer (API routes never fall through to index.html).
   app.use(notFoundHandler);
 
-  // 7. Error handler
+  // 10. Error handler last: Express only routes errors to handlers registered after the failing step.
   app.use(errorHandler);
 
   return app;

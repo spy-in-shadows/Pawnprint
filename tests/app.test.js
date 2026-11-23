@@ -215,3 +215,48 @@ describe('client index resolution', () => {
     }
   });
 });
+
+describe('middleware order', () => {
+  it('a rate-limited request is rejected before its body is parsed', async () => {
+    const { createRateLimiter } = await import('../src/middleware/rateLimit.js');
+    const limiter = createRateLimiter({ windowMs: 60000, max: 1 });
+    const server = await listen(createApp({ apiRateLimiter: limiter, corsOrigins: ['http://localhost:5173'] }));
+    const post = () => fetch(`${baseUrl(server)}/api/v1/anything`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:5173' },
+      body: '{"broken": ',
+    });
+    try {
+      // A preflight is answered by CORS and does not use up the limit.
+      const preflight = await fetch(`${baseUrl(server)}/api/v1/anything`, {
+        method: 'OPTIONS',
+        headers: { Origin: 'http://localhost:5173', 'Access-Control-Request-Method': 'POST' },
+      });
+      expect(preflight.status).toBe(204);
+
+      const first = await post();
+      expect(first.status).toBe(400);
+      expect((await first.json()).error.code).toBe('INVALID_JSON');
+
+      const second = await post();
+      expect(second.status).toBe(429);
+      // Security and CORS headers are on the 429 as well.
+      expect(second.headers.get('x-content-type-options')).toBe('nosniff');
+      expect(second.headers.get('access-control-allow-origin')).toBe('http://localhost:5173');
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
+  });
+
+  it('GET /health is never rate limited', async () => {
+    const { createRateLimiter } = await import('../src/middleware/rateLimit.js');
+    const limiter = createRateLimiter({ windowMs: 60000, max: 0 });
+    const server = await listen(createApp({ apiRateLimiter: limiter }));
+    try {
+      expect((await fetch(`${baseUrl(server)}/api/v1/me`)).status).toBe(429);
+      expect((await fetch(`${baseUrl(server)}/health`)).status).not.toBe(429);
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
+  });
+});
