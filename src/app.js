@@ -14,6 +14,11 @@ import * as healthController from './controllers/health.controller.js';
 export function createApp(options = {}) {
   const app = express();
 
+  // Behind a reverse proxy every request comes from the proxy's address; trusting it (TRUST_PROXY)
+  // makes req.ip the client address from X-Forwarded-For, so rate limits apply per client rather than
+  // to everyone at once, and req.protocol follows X-Forwarded-Proto (used by the CSRF origin check).
+  app.set('trust proxy', options.trustProxy ?? config.trustProxy);
+
   // Order matters; each step says why it sits where it does.
 
   // 1. helmet first: every response, including 429s, 404s and errors, carries the security headers.

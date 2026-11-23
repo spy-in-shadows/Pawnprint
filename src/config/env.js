@@ -17,6 +17,15 @@ function parseList(value) {
     .filter(Boolean);
 }
 
+// TRUST_PROXY: how many reverse proxies sit in front of the app. 'false' (default) trusts none, so
+// req.ip is the socket address; a number trusts that many hops of X-Forwarded-For; 'true' trusts all.
+function parseTrustProxy(value) {
+  if (value === undefined || value === '' || value === 'false') return false;
+  if (value === 'true') return true;
+  if (/^\d+$/.test(value)) return Number(value);
+  throw new Error(`TRUST_PROXY must be false, true or a number of proxy hops (got "${value}")`);
+}
+
 const config = {
   port: Number(process.env.PORT) || 3000,
   nodeEnv: process.env.NODE_ENV || 'development',
@@ -33,6 +42,7 @@ const config = {
   logLevel: process.env.LOG_LEVEL || 'info',
   jobStaleSeconds: Number(process.env.JOB_STALE_SECONDS) || 120,
   corsOrigins: parseList(process.env.CORS_ORIGINS),
+  trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
   // Development aid: log every Prisma query (text, params, duration). Params can include emails and
   // password hashes, so keep it off outside local debugging.
   prismaLogQueries: process.env.PRISMA_LOG_QUERIES === 'true',

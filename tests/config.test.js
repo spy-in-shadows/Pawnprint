@@ -76,4 +76,13 @@ describe('config loader', () => {
     const config = await loadConfig({ ...base, CORS_ORIGINS: ' http://localhost:5173 , https://a.example,, ' });
     expect(config.corsOrigins).toEqual(['http://localhost:5173', 'https://a.example']);
   });
+
+  it('parses TRUST_PROXY as false, true or a hop count and rejects anything else', async () => {
+    const base = { DATABASE_URL: 'postgresql://x', JWT_SECRET: 'secret' };
+    expect((await loadConfig(base)).trustProxy).toBe(false);
+    expect((await loadConfig({ ...base, TRUST_PROXY: 'false' })).trustProxy).toBe(false);
+    expect((await loadConfig({ ...base, TRUST_PROXY: 'true' })).trustProxy).toBe(true);
+    expect((await loadConfig({ ...base, TRUST_PROXY: '2' })).trustProxy).toBe(2);
+    await expect(loadConfig({ ...base, TRUST_PROXY: 'yes' })).rejects.toThrow('TRUST_PROXY must be');
+  });
 });
