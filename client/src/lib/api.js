@@ -1,26 +1,26 @@
+import { getAccessToken, refreshSession, clearSession } from './session';
+
 const API_PREFIX = '/api/v1';
 
-export function getStoredToken() {
-  try {
-    return localStorage.getItem('token');
-  } catch {
-    return null;
+// Endpoints whose 401 means "bad credentials" or "no session", never "access token expired".
+const NO_REFRESH_PATHS = ['/api/v1/auth/'];
+
+function redirectToLogin() {
+  if (typeof window !== 'undefined' && window.location && window.location.pathname !== '/login') {
+    window.location.href = '/login';
   }
 }
 
-export function clearStoredToken() {
-  try {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-  } catch {
-    // Ignore storage errors
-  }
+function send(url, options, headers, token) {
+  return fetch(url, {
+    credentials: 'same-origin',
+    ...options,
+    headers: token ? { ...headers, Authorization: `Bearer ${token}` } : headers,
+  });
 }
 
 export async function apiRequest(path, options = {}) {
   const url = path.startsWith('/api') ? path : `${API_PREFIX}${path.startsWith('/') ? path : `/${path}`}`;
-  const token = getStoredToken();
-
   const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
 
   const headers = {
@@ -28,19 +28,17 @@ export async function apiRequest(path, options = {}) {
     ...(options.headers || {}),
   };
 
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
+  let response = await send(url, options, headers, getAccessToken());
 
-  const response = await fetch(url, {
-    ...options,
-    headers,
-  });
-
-  if (response.status === 401) {
-    clearStoredToken();
-    if (typeof window !== 'undefined' && window.location && window.location.pathname !== '/login') {
-      window.location.href = '/login';
+  // Access token expired or missing: refresh once and retry the request once.
+  if (response.status === 401 && !NO_REFRESH_PATHS.some((prefix) => url.startsWith(prefix))) {
+    const nextToken = await refreshSession();
+    if (nextToken) {
+      response = await send(url, options, headers, nextToken);
+    }
+    if (response.status === 401) {
+      clearSession();
+      redirectToLogin();
     }
   }
 
