@@ -17,7 +17,7 @@ export function generateToken(user) {
   return jwt.sign(
     { sub: user.id, email: user.email, role: user.role ?? 'user' },
     config.jwtSecret,
-    { expiresIn: config.jwtExpiresIn, algorithm: 'HS256' }
+    { expiresIn: config.accessTokenTtl, algorithm: 'HS256' }
   );
 }
 
