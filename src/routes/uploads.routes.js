@@ -3,6 +3,8 @@ import multer from 'multer';
 import { authenticate } from '../middleware/authenticate.js';
 import * as uploadController from '../controllers/upload.controller.js';
 import { ValidationError } from '../utils/errors.js';
+import { validate } from '../middleware/validate.js';
+import { uploadPgnBody } from '../validation/upload.schemas.js';
 
 const storage = multer.memoryStorage();
 const upload = multer({
@@ -43,6 +45,7 @@ router.post(
       next();
     });
   },
+  validate({ body: uploadPgnBody }),
   uploadController.uploadPgn
 );
 

@@ -2,7 +2,7 @@ import * as gamesService from '../services/games.service.js';
 
 export async function list(req, res, next) {
   try {
-    const result = await gamesService.listGames(req.user.id, req.query);
+    const result = await gamesService.listGames(req.user.id, req.validatedQuery);
     res.status(200).json(result);
   } catch (err) {
     next(err);

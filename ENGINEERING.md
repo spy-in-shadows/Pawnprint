@@ -55,6 +55,6 @@ Team conventions for the Longitudinal Chess Analytics Engine. Every contributor 
 
 ## Allowed dependencies
 Adding any package not listed here needs B's approval (update this list in the same PR).
-- Server: express, @prisma/client, pg, bcrypt, jsonwebtoken, chess.js, multer, dotenv, helmet, cors, cookie-parser.
+- Server: express, @prisma/client, pg, bcrypt, jsonwebtoken, chess.js, multer, dotenv, helmet, cors, cookie-parser, zod.
 - Server dev: prisma, vitest. **supertest is NOT used**: HTTP tests use `fetch` against `app.listen(0)`.
 - Client (`client/`): react, react-dom, react-router-dom, vite, @vitejs/plugin-react, tailwindcss, recharts, react-chessboard, chess.js, vitest.

@@ -2,44 +2,21 @@ import * as analyticsRepo from '../repositories/analytics.repo.js';
 import * as summaryService from './summary.service.js';
 import { ValidationError } from '../utils/errors.js';
 
-const MAX_INT32 = 2147483647;
-
+// Formats are validated by analyticsQuery (src/validation/analytics.schemas.js); the date order
+// is a business rule and stays here. Dates are normalised to ISO strings for the repository.
 function validateFilters(query = {}) {
   const { accountId, from, to } = query;
-
-  let validatedAccountId;
-  if (accountId !== undefined && accountId !== null && accountId !== '') {
-    const num = Number(accountId);
-    if (!Number.isInteger(num) || num <= 0 || num > MAX_INT32) {
-      throw new ValidationError('accountId must be a positive integer');
-    }
-    validatedAccountId = num;
-  }
-
-  let fromDate;
-  let toDate;
-  if (from) {
-    fromDate = new Date(from);
-    if (isNaN(fromDate.getTime())) {
-      throw new ValidationError('Invalid date format');
-    }
-  }
-
-  if (to) {
-    toDate = new Date(to);
-    if (isNaN(toDate.getTime())) {
-      throw new ValidationError('Invalid date format');
-    }
-  }
+  const fromDate = from ? new Date(from) : undefined;
+  const toDate = to ? new Date(to) : undefined;
 
   if (fromDate && toDate && fromDate > toDate) {
     throw new ValidationError('from date must be before or equal to to date');
   }
 
   return {
-    accountId: validatedAccountId,
-    from: from ? fromDate.toISOString() : undefined,
-    to: to ? toDate.toISOString() : undefined,
+    accountId,
+    from: fromDate ? fromDate.toISOString() : undefined,
+    to: toDate ? toDate.toISOString() : undefined,
   };
 }
 
@@ -77,15 +54,7 @@ export async function getWeakestMotifs(userId, options = {}) {
 }
 
 export async function getSummary(userId, query = {}) {
-  let validatedAccountId;
-  if (query.accountId !== undefined && query.accountId !== null && query.accountId !== '') {
-    const num = Number(query.accountId);
-    if (!Number.isInteger(num) || num <= 0 || num > MAX_INT32) {
-      throw new ValidationError('accountId must be a positive integer');
-    }
-    validatedAccountId = num;
-  }
-  return summaryService.getAccountSummary(userId, validatedAccountId);
+  return summaryService.getAccountSummary(userId, query.accountId);
 }
 
 export const analyticsService = {

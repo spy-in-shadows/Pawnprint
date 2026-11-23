@@ -1,6 +1,4 @@
 import * as trainingService from '../services/training.service.js';
-import { parseIntId } from '../services/account.service.js';
-import { NotFoundError, ValidationError } from '../utils/errors.js';
 
 export async function list(req, res, next) {
   try {
@@ -22,26 +20,9 @@ export async function create(req, res, next) {
 
 export async function updateItem(req, res, next) {
   try {
-    const planId = parseIntId(req.params.planId);
-    if (!planId) {
-      throw new NotFoundError('Training plan not found');
-    }
-
-    const itemId = parseIntId(req.params.itemId);
-    if (!itemId) {
-      throw new NotFoundError('Training plan item not found');
-    }
-
-    if (typeof req.body?.completed !== 'boolean') {
-      throw new ValidationError('completed must be a boolean');
-    }
-
-    const result = await trainingService.setItemCompletion(
-      req.user.id,
-      planId,
-      itemId,
-      req.body.completed
-    );
+    // planId, itemId and completed are validated in training.routes.js.
+    const { planId, itemId } = req.params;
+    const result = await trainingService.setItemCompletion(req.user.id, planId, itemId, req.body.completed);
     res.json(result);
   } catch (err) {
     next(err);

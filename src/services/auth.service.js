@@ -2,9 +2,8 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import config from '../config/env.js';
 import * as userRepo from '../repositories/user.repo.js';
-import { ValidationError, ConflictError, UnauthorizedError } from '../utils/errors.js';
+import { ConflictError, UnauthorizedError } from '../utils/errors.js';
 
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const BCRYPT_SALT_ROUNDS = 10;
 const INVALID_CREDENTIALS_MSG = 'Invalid email or password';
 
@@ -30,15 +29,8 @@ export function verifyToken(token) {
 }
 
 export async function register(rawEmail, password) {
+  // Format and length are checked by registerBody (src/validation/auth.schemas.js).
   const email = normalizeEmail(rawEmail);
-
-  if (!email || !EMAIL_REGEX.test(email)) {
-    throw new ValidationError('Invalid email format');
-  }
-
-  if (typeof password !== 'string' || password.length < 8) {
-    throw new ValidationError('Password must be at least 8 characters long');
-  }
 
   const existing = await userRepo.findByEmail(email);
   if (existing) {

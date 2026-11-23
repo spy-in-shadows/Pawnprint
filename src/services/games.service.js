@@ -1,49 +1,19 @@
 import * as gameRepo from '../repositories/game.repo.js';
 import { ValidationError, NotFoundError } from '../utils/errors.js';
 
-const ECO_REGEX = /^[A-E]\d\d$/;
-const MAX_INT32 = 2147483647;
 
+// Field formats (accountId, opening, dates, page) are validated by listGamesQuery
+// (src/validation/games.schemas.js); the date order is a business rule and stays here.
 export async function listGames(userId, query = {}) {
   const { accountId, from, to, opening, page, pageSize } = query;
 
-  let validatedAccountId;
-  if (accountId !== undefined && accountId !== null && accountId !== '') {
-    const num = Number(accountId);
-    if (!Number.isInteger(num) || num <= 0 || num > MAX_INT32) {
-      throw new ValidationError('accountId must be a positive integer');
-    }
-    validatedAccountId = num;
-  }
-
-  if (opening !== undefined && opening !== null && opening !== '') {
-    if (typeof opening !== 'string' || !ECO_REGEX.test(opening)) {
-      throw new ValidationError('opening must be a valid 3-character ECO code (e.g. B00)');
-    }
-  }
-
-  if (from && to) {
-    const fromDate = new Date(from);
-    const toDate = new Date(to);
-    if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
-      throw new ValidationError('Invalid date format');
-    }
-    if (fromDate > toDate) {
-      throw new ValidationError('from date must be before or equal to to date');
-    }
-  } else if (from) {
-    if (isNaN(new Date(from).getTime())) {
-      throw new ValidationError('Invalid date format');
-    }
-  } else if (to) {
-    if (isNaN(new Date(to).getTime())) {
-      throw new ValidationError('Invalid date format');
-    }
+  if (from && to && new Date(from) > new Date(to)) {
+    throw new ValidationError('from date must be before or equal to to date');
   }
 
   return gameRepo.list({
     userId,
-    accountId: validatedAccountId,
+    accountId,
     from,
     to,
     opening: opening || undefined,
