@@ -1,7 +1,6 @@
 import { prisma } from '../config/db.js';
 import { NotFoundError, ValidationError, ConflictError } from '../utils/errors.js';
 
-const VALID_PLATFORMS = ['lichess', 'chesscom', 'upload'];
 const INT4_MAX = 2147483647;
 
 export function parseIntId(value) {
@@ -31,21 +30,9 @@ export async function listAccounts(userId) {
   });
 }
 
-export async function linkAccount(userId, { platform, username }) {
-  if (!platform || typeof platform !== 'string') {
-    throw new ValidationError('Platform is required');
-  }
-
-  const normalizedPlatform = platform.toLowerCase().trim();
-  if (!VALID_PLATFORMS.includes(normalizedPlatform)) {
-    throw new ValidationError(`Platform must be one of: ${VALID_PLATFORMS.join(', ')}`);
-  }
-
-  if (!username || typeof username !== 'string' || !username.trim()) {
-    throw new ValidationError('Username is required');
-  }
-
-  const normalizedUsername = username.trim();
+// platform (lower-cased, one of the known platforms) and username (trimmed, non-empty) are
+// validated by linkAccountBody (src/validation/account.schemas.js).
+export async function linkAccount(userId, { platform: normalizedPlatform, username: normalizedUsername }) {
 
   const platformRecord = await prisma.platform.findUnique({
     where: { name: normalizedPlatform },
@@ -84,12 +71,8 @@ export async function linkAccount(userId, { platform, username }) {
   });
 }
 
-export async function deleteAccount(userId, accountId) {
-  const parsedId = parseIntId(accountId);
-  if (!parsedId) {
-    throw new NotFoundError('Player account not found');
-  }
-
+// accountId is a validated positive int4 (accountIdParams).
+export async function deleteAccount(userId, parsedId) {
   const account = await prisma.playerAccount.findUnique({
     where: { id: parsedId },
   });

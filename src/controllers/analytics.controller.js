@@ -2,7 +2,7 @@ import * as analyticsService from '../services/analytics.service.js';
 
 export async function openings(req, res, next) {
   try {
-    const data = await analyticsService.getOpenings(req.user.id, req.query);
+    const data = await analyticsService.getOpenings(req.user.id, req.validatedQuery);
     res.status(200).json(data);
   } catch (err) {
     next(err);
@@ -11,7 +11,7 @@ export async function openings(req, res, next) {
 
 export async function phases(req, res, next) {
   try {
-    const data = await analyticsService.getPhases(req.user.id, req.query);
+    const data = await analyticsService.getPhases(req.user.id, req.validatedQuery);
     res.status(200).json(data);
   } catch (err) {
     next(err);
@@ -20,7 +20,7 @@ export async function phases(req, res, next) {
 
 export async function timePressure(req, res, next) {
   try {
-    const data = await analyticsService.getTimePressure(req.user.id, req.query);
+    const data = await analyticsService.getTimePressure(req.user.id, req.validatedQuery);
     res.status(200).json(data);
   } catch (err) {
     next(err);
@@ -29,7 +29,7 @@ export async function timePressure(req, res, next) {
 
 export async function trend(req, res, next) {
   try {
-    const data = await analyticsService.getTrend(req.user.id, req.query);
+    const data = await analyticsService.getTrend(req.user.id, req.validatedQuery);
     res.status(200).json(data);
   } catch (err) {
     next(err);
@@ -38,7 +38,7 @@ export async function trend(req, res, next) {
 
 export async function motifs(req, res, next) {
   try {
-    const data = await analyticsService.getMotifs(req.user.id, req.query);
+    const data = await analyticsService.getMotifs(req.user.id, req.validatedQuery);
     res.status(200).json(data);
   } catch (err) {
     next(err);
@@ -47,7 +47,7 @@ export async function motifs(req, res, next) {
 
 export async function summary(req, res, next) {
   try {
-    const data = await analyticsService.getSummary(req.user.id, req.query);
+    const data = await analyticsService.getSummary(req.user.id, req.validatedQuery);
     res.status(200).json(data);
   } catch (err) {
     next(err);
