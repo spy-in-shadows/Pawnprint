@@ -7,6 +7,14 @@ for (const key of required) {
   }
 }
 
+// HS256 is only as strong as its key: a short secret can be brute-forced from any issued token.
+export const MIN_JWT_SECRET_LENGTH = 32;
+if (process.env.JWT_SECRET.length < MIN_JWT_SECRET_LENGTH) {
+  throw new Error(
+    `JWT_SECRET must be at least ${MIN_JWT_SECRET_LENGTH} characters long; generate one with: openssl rand -hex 32`
+  );
+}
+
 // CORS_ORIGINS: comma-separated list of origins allowed to call the API from another origin
 // (for example http://localhost:5173 for the Vite dev server). Empty by default, which means
 // same-origin only: the API serves the built client itself, so production needs no entries.
