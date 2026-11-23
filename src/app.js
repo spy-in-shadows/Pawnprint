@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import express from 'express';
+import helmet from 'helmet';
 import v1Router from './routes/v1/index.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import { apiRateLimiter, authRateLimiter } from './middleware/rateLimit.js';
@@ -10,7 +11,31 @@ import * as healthController from './controllers/health.controller.js';
 export function createApp(options = {}) {
   const app = express();
 
-  // 1. Request logger (runs first)
+  // 0. Security headers, before anything else so every response (API, static, errors) carries them.
+  // The built client loads one module script and one stylesheet from /assets and sets styles only
+  // through the DOM (React style props), so no 'unsafe-inline' is needed. data: images are used by
+  // the drag preview of the board.
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        useDefaults: false,
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'"],
+          styleSrc: ["'self'"],
+          imgSrc: ["'self'", 'data:'],
+          connectSrc: ["'self'"],
+          fontSrc: ["'self'"],
+          objectSrc: ["'none'"],
+          baseUri: ["'self'"],
+          frameAncestors: ["'none'"],
+          formAction: ["'self'"],
+        },
+      },
+    })
+  );
+
+  // 1. Request logger
   app.use(requestLogger);
 
   // Root health endpoint (unauthenticated)
