@@ -18,6 +18,8 @@ export function authenticate(req, res, next) {
     req.user = {
       id: payload.sub,
       email: payload.email,
+      // Tokens issued before roles existed carry no role claim; they are regular users.
+      role: payload.role ?? 'user',
     };
     return next();
   } catch (err) {

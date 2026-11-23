@@ -26,6 +26,7 @@ export async function me(req, res, next) {
       user: {
         id: req.user.id,
         email: req.user.email,
+        role: req.user.role,
       },
     });
   } catch (err) {
