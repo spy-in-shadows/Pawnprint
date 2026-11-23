@@ -1,6 +1,31 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '../config/db.js';
 
 const MAX_INT32 = 2147483647;
+
+// Per-game counts of the owner's moves (moves whose mover_color is the game's color) for one page of
+// games, in a single grouped query: total owner moves (classified or not), blunders, and best/good.
+async function ownerMoveStats(gameIds) {
+  const stats = new Map();
+  if (gameIds.length === 0) return stats;
+
+  const rows = await prisma.$queryRaw`
+    SELECT m.game_id AS "gameId",
+           COUNT(*)::int AS "total",
+           COUNT(*) FILTER (WHERE c.name = 'blunder')::int AS "blunders",
+           COUNT(*) FILTER (WHERE c.name IN ('best', 'good'))::int AS "bestOrGood"
+    FROM moves m
+    JOIN games g ON g.id = m.game_id AND m.mover_color = g.color
+    LEFT JOIN move_classifications mc ON mc.move_id = m.id
+    LEFT JOIN classifications c ON c.id = mc.classification_id
+    WHERE m.game_id IN (${Prisma.join(gameIds)})
+    GROUP BY m.game_id
+  `;
+  for (const row of rows) {
+    stats.set(row.gameId, { total: row.total, blunders: row.blunders, bestOrGood: row.bestOrGood });
+  }
+  return stats;
+}
 
 export async function list({
   userId,
@@ -12,6 +37,7 @@ export async function list({
   pageSize = 20,
 }) {
   const safePage = Math.max(1, Number(page) || 1);
+  // Page size is capped at 100: it bounds the game ids passed to the aggregate query below.
   const safePageSize = Math.max(1, Math.min(100, Number(pageSize) || 20));
   const skip = (safePage - 1) * safePageSize;
 
@@ -48,45 +74,24 @@ export async function list({
         result: true,
         opening: true,
         timeControl: true,
-        moves: {
-          select: {
-            moverColor: true,
-            classification: {
-              select: {
-                classification: {
-                  select: {
-                    name: true,
-                  },
-                },
-              },
-            },
-          },
-        },
       },
     }),
   ]);
+
+  const stats = await ownerMoveStats(
+    games.filter((game) => game.analysisStatus === 'analyzed').map((game) => game.id)
+  );
 
   const items = games.map((game) => {
     let blunders = 0;
     let accuracyPct = null;
 
     if (game.analysisStatus === 'analyzed') {
-      const ownerMoves = game.moves.filter((m) => m.moverColor === game.color);
-      const totalOwnerMoves = ownerMoves.length;
-
-      let bestOrGoodCount = 0;
-      for (const move of ownerMoves) {
-        const className = move.classification?.classification?.name;
-        if (className === 'blunder') {
-          blunders += 1;
-        }
-        if (className === 'best' || className === 'good') {
-          bestOrGoodCount += 1;
-        }
-      }
-
+      const gameStats = stats.get(game.id);
+      blunders = gameStats?.blunders ?? 0;
+      const totalOwnerMoves = gameStats?.total ?? 0;
       accuracyPct =
-        totalOwnerMoves > 0 ? (bestOrGoodCount / totalOwnerMoves) * 100 : 0;
+        totalOwnerMoves > 0 ? (gameStats.bestOrGood / totalOwnerMoves) * 100 : 0;
     }
 
     return {
