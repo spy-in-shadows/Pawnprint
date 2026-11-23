@@ -532,13 +532,25 @@ export async function* parsePgnStream(readable) {
   }
 }
 
-export async function parsePgnString(str) {
+// Lets the event loop run queued I/O (other requests, timers) before continuing.
+const yieldToEventLoop = () => new Promise((resolve) => setImmediate(resolve));
+
+/**
+ * Parses a whole PGN string. A string is one stream chunk, so readline has every line ready at once
+ * and the loop below would otherwise never give the event loop a turn: a 5 MB upload (about 11,000
+ * games) blocked the server for about 12 s. Yielding every `yieldEvery` games keeps each stall to
+ * the time of one batch, so other requests are served while a large upload is parsed.
+ */
+export async function parsePgnString(str, { yieldEvery = 1 } = {}) {
   if (typeof str !== 'string' || !str.trim()) {
     return [];
   }
   const games = [];
   for await (const game of parsePgnStream(str)) {
     games.push(game);
+    if (yieldEvery > 0 && games.length % yieldEvery === 0) {
+      await yieldToEventLoop();
+    }
   }
   return games;
 }
