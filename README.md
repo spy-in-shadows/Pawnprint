@@ -130,6 +130,7 @@ Import tactical training puzzles from the Lichess puzzle bank into the database:
 | `npm run bench` | Runs the comparative move insertion benchmark (`benchmarkInsert.js`) |
 | `npm run bench:throughput` | Runs the multi-worker analysis throughput benchmark |
 | `npm run bench:queries` | Measures execution time across analytics queries with/without indexes and rollups |
+| `npm run make-admin -- <email>` | Gives an existing user the admin role (exits with an error if the email is not registered); takes effect at the user's next access token |
 | `npm run dq` | Runs data-quality verification checks across database consistency and invariants |
 | `npm run import:puzzles` | Imports tactical puzzles from Lichess CSV (`scripts/importPuzzles.js`) |
 | `npm run build:client` | Compiles the React SPA with Vite for production |
@@ -180,8 +181,16 @@ All data routes require `Authorization: Bearer <jwt>`. Accessing another user's 
 
 ### Auth
 - `POST /api/v1/auth/register` — Create user account (`{email, password}`)
-- `POST /api/v1/auth/login` — Authenticate and receive JWT (`{email, password}`)
-- `GET /api/v1/me` — Inspect authenticated user profile
+- `POST /api/v1/auth/login` — Authenticate and receive a short-lived access token (`{email, password}`); also sets the `refresh_token` cookie
+- `POST /api/v1/auth/refresh` — Exchange the refresh cookie for a new access token (rotates the cookie; needs `X-Requested-With: fetch`)
+- `POST /api/v1/auth/logout` — Revoke the refresh token and clear the cookie (204; needs `X-Requested-With: fetch`)
+- `GET /api/v1/me` — Inspect authenticated user profile (`id`, `email`, `role`)
+
+Access tokens last `ACCESS_TOKEN_TTL` (default 15 minutes); refresh tokens last `REFRESH_TOKEN_TTL_DAYS` (default 7) and are rotated on every use. See DESIGN.md section 11 for the refresh, reuse-detection and CSRF rules.
+
+### Admin
+- `GET /api/v1/admin/users` — Users with account and game counts (`page`, `pageSize` up to 100); admin role only
+- `GET /api/v1/admin/jobs` — Analysis job counts by status and the 20 most recent jobs; admin role only
 
 ### Accounts & Ingestion
 - `GET /api/v1/accounts` — List user's linked chess accounts

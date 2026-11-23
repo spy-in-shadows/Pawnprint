@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict y2l1sU6zGXQeUrdHqgmCcH4AEjjefFjv8da1kq9EwIukv4PzHZ5dtqUNa8ldkdA
+\restrict 3nE00ybfWaYdbPtemugbogXgrDC4jou5tYOMXpa1tQUtQPPeEk6kS0zgNznOK7v
 
 -- Dumped from database version 16.15 (Debian 16.15-1.pgdg13+2)
 -- Dumped by pg_dump version 16.15 (Debian 16.15-1.pgdg13+2)
@@ -534,6 +534,42 @@ ALTER SEQUENCE public.puzzles_id_seq OWNED BY public.puzzles.id;
 
 
 --
+-- Name: refresh_tokens; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.refresh_tokens (
+    id integer NOT NULL,
+    user_id integer NOT NULL,
+    token_hash text NOT NULL,
+    family_id text NOT NULL,
+    expires_at timestamp(3) without time zone NOT NULL,
+    revoked_at timestamp(3) without time zone,
+    replaced_by_id integer,
+    created_at timestamp(3) without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+
+--
+-- Name: refresh_tokens_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.refresh_tokens_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: refresh_tokens_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.refresh_tokens_id_seq OWNED BY public.refresh_tokens.id;
+
+
+--
 -- Name: results; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -671,7 +707,9 @@ CREATE TABLE public.users (
     id integer NOT NULL,
     email text NOT NULL,
     password_hash text NOT NULL,
-    created_at timestamp(3) without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
+    created_at timestamp(3) without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    role text DEFAULT 'user'::text NOT NULL,
+    CONSTRAINT users_role_check CHECK ((role = ANY (ARRAY['user'::text, 'admin'::text])))
 );
 
 
@@ -770,6 +808,13 @@ ALTER TABLE ONLY public.player_accounts ALTER COLUMN id SET DEFAULT nextval('pub
 --
 
 ALTER TABLE ONLY public.puzzles ALTER COLUMN id SET DEFAULT nextval('public.puzzles_id_seq'::regclass);
+
+
+--
+-- Name: refresh_tokens id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.refresh_tokens ALTER COLUMN id SET DEFAULT nextval('public.refresh_tokens_id_seq'::regclass);
 
 
 --
@@ -960,6 +1005,14 @@ ALTER TABLE ONLY public.puzzles
 
 
 --
+-- Name: refresh_tokens refresh_tokens_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.refresh_tokens
+    ADD CONSTRAINT refresh_tokens_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: results results_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1102,6 +1155,27 @@ CREATE UNIQUE INDEX player_accounts_platform_id_username_key ON public.player_ac
 --
 
 CREATE UNIQUE INDEX puzzles_lichess_id_key ON public.puzzles USING btree (lichess_id);
+
+
+--
+-- Name: refresh_tokens_family_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX refresh_tokens_family_id_idx ON public.refresh_tokens USING btree (family_id);
+
+
+--
+-- Name: refresh_tokens_token_hash_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX refresh_tokens_token_hash_key ON public.refresh_tokens USING btree (token_hash);
+
+
+--
+-- Name: refresh_tokens_user_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX refresh_tokens_user_id_idx ON public.refresh_tokens USING btree (user_id);
 
 
 --
@@ -1318,6 +1392,22 @@ ALTER TABLE ONLY public.puzzle_motifs
 
 
 --
+-- Name: refresh_tokens refresh_tokens_replaced_by_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.refresh_tokens
+    ADD CONSTRAINT refresh_tokens_replaced_by_id_fkey FOREIGN KEY (replaced_by_id) REFERENCES public.refresh_tokens(id) ON UPDATE CASCADE ON DELETE SET NULL;
+
+
+--
+-- Name: refresh_tokens refresh_tokens_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.refresh_tokens
+    ADD CONSTRAINT refresh_tokens_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
 -- Name: training_plan_items training_plan_items_motif_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1353,5 +1443,5 @@ ALTER TABLE ONLY public.training_plans
 -- PostgreSQL database dump complete
 --
 
-\unrestrict y2l1sU6zGXQeUrdHqgmCcH4AEjjefFjv8da1kq9EwIukv4PzHZ5dtqUNa8ldkdA
+\unrestrict 3nE00ybfWaYdbPtemugbogXgrDC4jou5tYOMXpa1tQUtQPPeEk6kS0zgNznOK7v
 
