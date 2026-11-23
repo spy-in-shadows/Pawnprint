@@ -19,6 +19,7 @@
     "import:puzzles": "node scripts/importPuzzles.js",
     "dq": "node scripts/dataQuality.js",
     "make-admin": "node scripts/makeAdmin.js",
+    "check:api-docs": "node scripts/checkApiDocs.js",
     "build:client": "npm --prefix client run build"
   },
   "dependencies": {

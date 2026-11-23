@@ -131,6 +131,7 @@ Import tactical training puzzles from the Lichess puzzle bank into the database:
 | `npm run bench:throughput` | Runs the multi-worker analysis throughput benchmark |
 | `npm run bench:queries` | Measures execution time across analytics queries with/without indexes and rollups |
 | `npm run make-admin -- <email>` | Gives an existing user the admin role (exits with an error if the email is not registered); takes effect at the user's next access token |
+| `npm run check:api-docs` | Checks that docs/API.md and the Postman collection list exactly the routes in the code |
 | `npm run dq` | Runs data-quality verification checks across database consistency and invariants |
 | `npm run import:puzzles` | Imports tactical puzzles from Lichess CSV (`scripts/importPuzzles.js`) |
 | `npm run build:client` | Compiles the React SPA with Vite for production |
@@ -176,6 +177,8 @@ Query performance measured across 20 iterations (warmup 3) against 10,000 games 
 | 242.35 ms / 244.45 ms | 0.29 ms / 0.58 ms | 833.18x |
 
 ## API Endpoints
+
+The full reference (auth, roles, request fields, status codes, error format, idempotency and rate limits) is in [docs/API.md](docs/API.md), with a Postman collection in [docs/pawnprint.postman_collection.json](docs/pawnprint.postman_collection.json). `npm run check:api-docs` checks both against the route files.
 
 All data routes require `Authorization: Bearer <jwt>`. Accessing another user's resource returns `404 Not Found`.
 
