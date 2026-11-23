@@ -1,4 +1,5 @@
 import config from '../config/env.js';
+import { currentRequestId } from './requestContext.js';
 
 const LEVELS = { debug: 0, info: 1, warn: 2, error: 3 };
 const REDACT_KEYS = new Set(['password', 'token', 'authorization', 'jwt']);
@@ -21,7 +22,8 @@ function createLogger(baseMeta = {}) {
 
   function write(level, msg, meta = {}) {
     if (LEVELS[level] < threshold) return;
-    const merged = { ...baseMeta, ...meta };
+    const requestId = currentRequestId();
+    const merged = { ...(requestId ? { requestId } : {}), ...baseMeta, ...meta };
     const safe = redact(merged);
     if (safe.err && typeof safe.err === 'object') {
       safe.err = serializeError(safe.err);

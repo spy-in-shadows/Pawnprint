@@ -229,7 +229,7 @@ PATCH  /api/v1/training/plans/:planId/items/:itemId
 GET    /api/v1/health
 ```
 
-Middleware chain: `helmet` (security headers and CSP) -> `cors` (allowlist from `CORS_ORIGINS`) -> `requestLogger` -> `express.json` -> `cookie-parser` -> `rateLimit` (simple, hand-written; a stricter limiter on `/auth`) -> route-level `authenticate` (and `requireRole` on `/admin`) -> controller -> `notFoundHandler` / `errorHandler`. `GET /health` is also served outside `/api/v1`, and the built client is served from `client/dist` with an SPA fallback for non-API GET requests.
+Middleware chain (order and reasons in comments in `src/app.js`): `helmet` -> `requestId` (X-Request-Id, and the id on every log line through AsyncLocalStorage) -> `requestLogger` -> `GET /health` -> `cors` (allowlist from `CORS_ORIGINS`) -> `rateLimit` (simple, hand-written; a stricter limiter on `/auth`; before any body parsing) -> `express.json` -> `cookie-parser` -> `/api/v1` router with route-level `validate` (zod schemas in `src/validation`), `authenticate` and `requireRole` on `/admin` -> static client with SPA fallback -> `notFoundHandler` -> `errorHandler`. `trust proxy` comes from `TRUST_PROXY`.
 
 ### Authentication, roles and sessions
 

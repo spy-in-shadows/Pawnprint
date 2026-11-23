@@ -64,7 +64,13 @@ Every error has the same shape:
 | 409 | `CONFLICT` | Email already registered; account already linked. |
 | 413 | `PAYLOAD_TOO_LARGE` | JSON body over 1 MB. |
 | 429 | `RATE_LIMIT_EXCEEDED` | Rate limit reached; see `Retry-After`. |
-| 500 | `INTERNAL_ERROR` | Unexpected failure. The message is generic and never includes internals. |
+| 500 | `INTERNAL_ERROR` | Unexpected failure. The message is generic and never includes internals; the body also carries `error.requestId`. |
+
+Every response, successful or not, has an `X-Request-Id` header (a fresh UUID; an incoming `X-Request-Id` is ignored). Every server log line written while handling that request carries the same `requestId`, so when reporting a 500, quote `error.requestId`:
+
+```json
+{ "error": { "message": "Internal server error", "code": "INTERNAL_ERROR", "requestId": "0b6c1f2e-6f0e-4d7b-9a51-3f8f3f5a2c11" } }
+```
 
 ## Idempotency
 
