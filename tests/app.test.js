@@ -260,3 +260,25 @@ describe('middleware order', () => {
     }
   });
 });
+
+describe('trust proxy', () => {
+  async function twoClients(trustProxy) {
+    const { createRateLimiter } = await import('../src/middleware/rateLimit.js');
+    const limiter = createRateLimiter({ windowMs: 60000, max: 1 });
+    const server = await listen(createApp({ apiRateLimiter: limiter, trustProxy }));
+    try {
+      const call = (ip) => fetch(`${baseUrl(server)}/api/v1/nope`, { headers: { 'X-Forwarded-For': ip } });
+      return [(await call('203.0.113.1')).status, (await call('203.0.113.2')).status, (await call('203.0.113.1')).status];
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
+  }
+
+  it('without TRUST_PROXY, X-Forwarded-For is ignored and all requests share one bucket', async () => {
+    expect(await twoClients(false)).toEqual([404, 429, 429]);
+  });
+
+  it('with one trusted hop, each forwarded client gets its own bucket', async () => {
+    expect(await twoClients(1)).toEqual([404, 404, 429]);
+  });
+});
