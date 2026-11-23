@@ -24,6 +24,9 @@ export function errorHandler(err, req, res, next) {
     return res.status(parserError.status).json({ error: { message: parserError.message, code: parserError.code } });
   }
 
-  logger.error('Request failed', { method: req.method, url: req.originalUrl, err });
-  return res.status(500).json({ error: { message: 'Internal server error', code: 'INTERNAL_ERROR' } });
+  logger.error('Request failed', { requestId: req.id, method: req.method, url: req.originalUrl, err });
+  // The id lets a user report the failure; the log line with the same id has the details.
+  const error = { message: 'Internal server error', code: 'INTERNAL_ERROR' };
+  if (req.id) error.requestId = req.id;
+  return res.status(500).json({ error });
 }

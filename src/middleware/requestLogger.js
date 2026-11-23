@@ -6,6 +6,7 @@ export function requestLogger(req, res, next) {
   res.on('finish', () => {
     const durationMs = Date.now() - start;
     const meta = {
+      requestId: req.id,
       method: req.method,
       path: req.originalUrl || req.url,
       status: res.statusCode,
