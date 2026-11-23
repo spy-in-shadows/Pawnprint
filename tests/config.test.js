@@ -69,4 +69,11 @@ describe('config loader', () => {
     expect(config.pgPoolMax).toBe(20);
     expect(config.jobStaleSeconds).toBe(300);
   });
+
+  it('parses CORS_ORIGINS as a trimmed list and defaults to empty', async () => {
+    const base = { DATABASE_URL: 'postgresql://x', JWT_SECRET: 'secret' };
+    expect((await loadConfig(base)).corsOrigins).toEqual([]);
+    const config = await loadConfig({ ...base, CORS_ORIGINS: ' http://localhost:5173 , https://a.example,, ' });
+    expect(config.corsOrigins).toEqual(['http://localhost:5173', 'https://a.example']);
+  });
 });

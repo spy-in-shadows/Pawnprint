@@ -133,3 +133,45 @@ describe('security headers', () => {
     expect(res.headers.get('content-security-policy')).toBeTruthy();
   });
 });
+
+describe('CORS allowlist', () => {
+  let server;
+  beforeAll(async () => { server = await listen(createApp({ corsOrigins: ['http://localhost:5173'] })); });
+  afterAll(() => new Promise((resolve) => server.close(resolve)));
+
+  it('an allowed origin gets Access-Control-Allow-Origin', async () => {
+    const res = await fetch(`${baseUrl(server)}/api/v1/health`, { headers: { Origin: 'http://localhost:5173' } });
+    expect(res.headers.get('access-control-allow-origin')).toBe('http://localhost:5173');
+    expect(res.headers.get('access-control-allow-credentials')).toBeNull();
+  });
+
+  it('a disallowed origin does not', async () => {
+    const res = await fetch(`${baseUrl(server)}/api/v1/health`, { headers: { Origin: 'http://evil.example' } });
+    expect(res.headers.get('access-control-allow-origin')).toBeNull();
+  });
+
+  it('preflight for an allowed origin lists the allowed methods and headers', async () => {
+    const res = await fetch(`${baseUrl(server)}/api/v1/games`, {
+      method: 'OPTIONS',
+      headers: {
+        Origin: 'http://localhost:5173',
+        'Access-Control-Request-Method': 'PATCH',
+        'Access-Control-Request-Headers': 'Authorization,Content-Type',
+      },
+    });
+    expect(res.status).toBe(204);
+    expect(res.headers.get('access-control-allow-origin')).toBe('http://localhost:5173');
+    expect(res.headers.get('access-control-allow-methods')).toBe('GET,POST,PATCH,DELETE');
+    expect(res.headers.get('access-control-allow-headers')).toBe('Content-Type,Authorization');
+  });
+
+  it('with the default empty list no origin is allowed', async () => {
+    const plain = await listen(createApp({ corsOrigins: [] }));
+    try {
+      const res = await fetch(`${baseUrl(plain)}/api/v1/health`, { headers: { Origin: 'http://localhost:5173' } });
+      expect(res.headers.get('access-control-allow-origin')).toBeNull();
+    } finally {
+      await new Promise((resolve) => plain.close(resolve));
+    }
+  });
+});

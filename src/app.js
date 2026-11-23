@@ -2,6 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import express from 'express';
 import helmet from 'helmet';
+import cors from 'cors';
+import config from './config/env.js';
 import v1Router from './routes/v1/index.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import { apiRateLimiter, authRateLimiter } from './middleware/rateLimit.js';
@@ -32,6 +34,19 @@ export function createApp(options = {}) {
           formAction: ["'self'"],
         },
       },
+    })
+  );
+
+  // CORS: only origins listed in CORS_ORIGINS get Access-Control-Allow-Origin. With the default empty
+  // list no cross-origin caller is allowed; same-origin requests from the served client are unaffected.
+  // Auth uses Bearer tokens, not cookies, so credentials stay off.
+  const allowedOrigins = new Set(options.corsOrigins ?? config.corsOrigins);
+  app.use(
+    cors({
+      origin: (origin, callback) => callback(null, Boolean(origin) && allowedOrigins.has(origin)),
+      methods: ['GET', 'POST', 'PATCH', 'DELETE'],
+      allowedHeaders: ['Content-Type', 'Authorization'],
+      credentials: false,
     })
   );
 
