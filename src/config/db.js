@@ -14,9 +14,29 @@ const TIMESTAMP_OID = 1114;
 pg.defaults.parseInputDatesAsUTC = true;
 pg.types.setTypeParser(TIMESTAMP_OID, (value) => new Date(`${value.replace(' ', 'T')}Z`));
 
-export const prisma = new PrismaClient({
-  log: config.nodeEnv === 'development' ? ['warn', 'error'] : ['error'],
-});
+export function prismaClientOptions({ nodeEnv, prismaLogQueries }) {
+  const log = nodeEnv === 'development' ? ['warn', 'error'] : ['error'];
+  if (prismaLogQueries) {
+    // Emitted as events (not printed by Prisma) so queries go through the project logger.
+    log.push({ emit: 'event', level: 'query' });
+  }
+  return { log };
+}
+
+export function attachQueryLogger(client, log = logger) {
+  client.$on('query', (event) => {
+    log.info('db query', {
+      query: event.query,
+      params: event.params,
+      durationMs: Number(event.duration),
+    });
+  });
+}
+
+export const prisma = new PrismaClient(prismaClientOptions(config));
+if (config.prismaLogQueries) {
+  attachQueryLogger(prisma);
+}
 
 export const pgPool = new pg.Pool({
   connectionString: config.databaseUrl,
