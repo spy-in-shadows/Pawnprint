@@ -57,7 +57,7 @@ jobs:
         run: npm test
         env:
           DATABASE_URL: postgresql://chess:chess@localhost:5432/chess
-          JWT_SECRET: ci-secret
+          JWT_SECRET: ci-secret-0123456789abcdef0123456789abcdef
           STOCKFISH_PATH: /usr/games/stockfish
 
   client:

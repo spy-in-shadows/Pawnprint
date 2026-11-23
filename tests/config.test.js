@@ -28,6 +28,8 @@ async function loadConfig(overrides) {
   }
 }
 
+const SECRET = 'test-secret-0123456789abcdef0123456789';
+
 describe('config loader', () => {
   it('throws when JWT_SECRET is missing', async () => {
     await expect(loadConfig({ DATABASE_URL: 'postgresql://x' })).rejects.toThrow(
@@ -36,13 +38,13 @@ describe('config loader', () => {
   });
 
   it('throws when DATABASE_URL is missing', async () => {
-    await expect(loadConfig({ JWT_SECRET: 'secret' })).rejects.toThrow(
+    await expect(loadConfig({ JWT_SECRET: SECRET })).rejects.toThrow(
       'Missing required environment variable: DATABASE_URL'
     );
   });
 
   it('applies numeric defaults when optional vars are absent', async () => {
-    const config = await loadConfig({ DATABASE_URL: 'postgresql://x', JWT_SECRET: 'secret' });
+    const config = await loadConfig({ DATABASE_URL: 'postgresql://x', JWT_SECRET: SECRET });
     expect(config.engineDepth).toBe(12);
     expect(config.engineThreads).toBe(1);
     expect(config.engineHashMb).toBe(64);
@@ -54,7 +56,7 @@ describe('config loader', () => {
   it('coerces numeric env vars from strings', async () => {
     const config = await loadConfig({
       DATABASE_URL: 'postgresql://x',
-      JWT_SECRET: 'secret',
+      JWT_SECRET: SECRET,
       PORT: '4000',
       ENGINE_DEPTH: '20',
       ENGINE_THREADS: '4',
@@ -71,18 +73,26 @@ describe('config loader', () => {
   });
 
   it('parses CORS_ORIGINS as a trimmed list and defaults to empty', async () => {
-    const base = { DATABASE_URL: 'postgresql://x', JWT_SECRET: 'secret' };
+    const base = { DATABASE_URL: 'postgresql://x', JWT_SECRET: SECRET };
     expect((await loadConfig(base)).corsOrigins).toEqual([]);
     const config = await loadConfig({ ...base, CORS_ORIGINS: ' http://localhost:5173 , https://a.example,, ' });
     expect(config.corsOrigins).toEqual(['http://localhost:5173', 'https://a.example']);
   });
 
   it('parses TRUST_PROXY as false, true or a hop count and rejects anything else', async () => {
-    const base = { DATABASE_URL: 'postgresql://x', JWT_SECRET: 'secret' };
+    const base = { DATABASE_URL: 'postgresql://x', JWT_SECRET: SECRET };
     expect((await loadConfig(base)).trustProxy).toBe(false);
     expect((await loadConfig({ ...base, TRUST_PROXY: 'false' })).trustProxy).toBe(false);
     expect((await loadConfig({ ...base, TRUST_PROXY: 'true' })).trustProxy).toBe(true);
     expect((await loadConfig({ ...base, TRUST_PROXY: '2' })).trustProxy).toBe(2);
     await expect(loadConfig({ ...base, TRUST_PROXY: 'yes' })).rejects.toThrow('TRUST_PROXY must be');
+  });
+
+  it('refuses a JWT_SECRET shorter than 32 characters', async () => {
+    const base = { DATABASE_URL: 'postgresql://x' };
+    await expect(loadConfig({ ...base, JWT_SECRET: 'x'.repeat(31) })).rejects.toThrow(
+      'JWT_SECRET must be at least 32 characters long'
+    );
+    expect((await loadConfig({ ...base, JWT_SECRET: 'x'.repeat(32) })).jwtSecret).toBe('x'.repeat(32));
   });
 });
