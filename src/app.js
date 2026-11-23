@@ -70,18 +70,18 @@ export function createApp(options = {}) {
 
   // 5. Static client serving with SPA fallback for non-/api GET routes
   const clientDist = options.clientDistPath ?? path.resolve(process.cwd(), 'client/dist');
+  // Both checks run once here, not per request; rebuild the client before starting the server.
   if (fs.existsSync(clientDist)) {
     app.use(express.static(clientDist));
-    app.use((req, res, next) => {
-      if (req.method !== 'GET' || req.path.startsWith('/api')) {
-        return next();
-      }
-      const indexPath = path.join(clientDist, 'index.html');
-      if (fs.existsSync(indexPath)) {
+    const indexPath = path.join(clientDist, 'index.html');
+    if (fs.existsSync(indexPath)) {
+      app.use((req, res, next) => {
+        if (req.method !== 'GET' || req.path.startsWith('/api')) {
+          return next();
+        }
         return res.sendFile(indexPath);
-      }
-      next();
-    });
+      });
+    }
   }
 
   // 6. 404 handler (API routes never fall through to index.html)
