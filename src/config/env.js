@@ -31,6 +31,9 @@ const config = {
   logLevel: process.env.LOG_LEVEL || 'info',
   jobStaleSeconds: Number(process.env.JOB_STALE_SECONDS) || 120,
   corsOrigins: parseList(process.env.CORS_ORIGINS),
+  // Development aid: log every Prisma query (text, params, duration). Params can include emails and
+  // password hashes, so keep it off outside local debugging.
+  prismaLogQueries: process.env.PRISMA_LOG_QUERIES === 'true',
 };
 
 export default config;
