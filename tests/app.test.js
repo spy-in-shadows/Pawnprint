@@ -110,3 +110,26 @@ describe('error classes', () => {
     expect(engine.isDataError).toBeUndefined();
   });
 });
+
+describe('security headers', () => {
+  let server;
+  beforeAll(async () => { server = await listen(createApp()); });
+  afterAll(() => new Promise((resolve) => server.close(resolve)));
+
+  it('sets nosniff and a CSP and hides X-Powered-By on /api/v1/health', async () => {
+    const res = await fetch(`${baseUrl(server)}/api/v1/health`);
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff');
+    const csp = res.headers.get('content-security-policy');
+    expect(csp).toBeTruthy();
+    expect(csp).toContain("script-src 'self'");
+    expect(csp).toContain("img-src 'self' data:");
+    expect(csp).toContain("connect-src 'self'");
+    expect(res.headers.get('x-powered-by')).toBeNull();
+  });
+
+  it('sets the headers on 404 responses too', async () => {
+    const res = await fetch(`${baseUrl(server)}/api/v1/nope`);
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(res.headers.get('content-security-policy')).toBeTruthy();
+  });
+});
