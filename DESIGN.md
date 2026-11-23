@@ -42,7 +42,8 @@ Two separate Node entry points share the same code and database:
 Design rules: no JSON blobs for move data, no wide NULL-filled rows, every repeated string lives in a lookup table, and write-heavy tables stay narrow with few indexes.
 
 ### Identity
-- `users(id, email, password_hash, created_at)`
+- `users(id, email, password_hash, role, created_at)`: `role` is `user` (default) or `admin`
+- `refresh_tokens(id, user_id, token_hash UNIQUE, family_id, expires_at, revoked_at, replaced_by_id, created_at)`: rotating refresh tokens, stored only as SHA-256 hashes (section 11)
 - `player_accounts(id, user_id, platform_id, username, last_synced_at, created_at, UNIQUE(platform_id, username))`
 - `platforms(id, name)`: lichess, chesscom, upload
 
@@ -87,7 +88,7 @@ Design rules: no JSON blobs for move data, no wide NULL-filled rows, every repea
 - Every table has a primary key; foreign keys use `ON DELETE CASCADE` for ownership (user -> accounts -> games -> moves -> evaluations), `RESTRICT` for lookups in use and `SET NULL` for optional lookups.
 - Unique keys make imports idempotent and stop duplicates: `games(platform_id, external_id)`, `player_accounts(platform_id, username)`, `moves(game_id, ply)`, `users(email)`, natural keys of the lookups, and the partial unique index on active jobs above.
 - CHECK constraints (migration `20261122161952_add_check_constraints`, not modelled by Prisma; listed in comments in `prisma/schema.prisma`):
-  - value sets: `games.color` and `moves.mover_color` in (`white`, `black`); `games.analysis_status` in (`pending`, `analyzed`, `failed`); `analysis_jobs.status` in (`queued`, `running`, `completed`, `failed`); `analysis_job_games.status` in (`pending`, `analyzing`, `done`, `failed`); `move_motifs.kind` in (`allowed`, `missed`); `time_controls.category` in (`bullet`, `blitz`, `rapid`, `classical`, `correspondence`).
+  - value sets: `users.role` in (`user`, `admin`) (migration `20261124090000_user_roles`); `games.color` and `moves.mover_color` in (`white`, `black`); `games.analysis_status` in (`pending`, `analyzed`, `failed`); `analysis_jobs.status` in (`queued`, `running`, `completed`, `failed`); `analysis_job_games.status` in (`pending`, `analyzing`, `done`, `failed`); `move_motifs.kind` in (`allowed`, `missed`); `time_controls.category` in (`bullet`, `blitz`, `rapid`, `classical`, `correspondence`).
   - ranges: `moves.ply > 0`; `games.total_plies`, clocks, time spent, time-control seconds, `cp_loss`, job counters and summary counts and averages `>= 0`; game ratings `>= 0` and puzzle ratings `> 0`; `move_evals.depth >= 0` (terminal positions use depth 0); engine depth, threads and hash `> 0`; `analysis_jobs.max_games > 0`; `since <= until` when both are set; `account_summary.accuracy_pct` between 0 and 100.
 - Rules that need other rows, other tables or chess logic stay in the application and in the data-quality checks (`src/workers/dataQuality.js`): the `reason_code` format, depth 0 paired with `best_uci = 'none'`, one name per ECO code, `games.platform_id` equal to the account's platform, and move consistency (mover colour, SAN and UCI against the FEN).
 
@@ -195,9 +196,14 @@ Evaluated strictly on mistakes and blunders (`classification IN ('mistake', 'blu
 ## 11. API surface (v1, REST, resource-based)
 
 ```
-POST   /api/v1/auth/register
-POST   /api/v1/auth/login
-GET    /api/v1/me
+POST   /api/v1/auth/register             sets the refresh cookie, returns {token, user}
+POST   /api/v1/auth/login                sets the refresh cookie, returns {token, user}
+POST   /api/v1/auth/refresh              rotates the refresh cookie, returns {token, user}
+POST   /api/v1/auth/logout               revokes the refresh token, clears the cookie, 204
+GET    /api/v1/me                         {user:{id, email, role}}
+
+GET    /api/v1/admin/users                admin only; ?page&pageSize (max 100)
+GET    /api/v1/admin/jobs                 admin only; job counts by status and the 20 most recent jobs
 
 GET    /api/v1/accounts
 POST   /api/v1/accounts                   link a Lichess/Chess.com username
@@ -223,7 +229,18 @@ PATCH  /api/v1/training/plans/:planId/items/:itemId
 GET    /api/v1/health
 ```
 
-Middleware chain: `requestLogger` -> `express.json` -> `rateLimit` (simple, hand-written; a stricter limiter on `/auth`) -> route-level `authenticate` -> controller -> `notFoundHandler` / `errorHandler`. `GET /health` is also served outside `/api/v1`, and the built client is served from `client/dist` with an SPA fallback for non-API GET requests.
+Middleware chain: `helmet` (security headers and CSP) -> `cors` (allowlist from `CORS_ORIGINS`) -> `requestLogger` -> `express.json` -> `cookie-parser` -> `rateLimit` (simple, hand-written; a stricter limiter on `/auth`) -> route-level `authenticate` (and `requireRole` on `/admin`) -> controller -> `notFoundHandler` / `errorHandler`. `GET /health` is also served outside `/api/v1`, and the built client is served from `client/dist` with an SPA fallback for non-API GET requests.
+
+### Authentication, roles and sessions
+
+- **Roles.** `users.role` is `user` or `admin` (CHECK constraint). The role is a claim in the access token and is returned by `/me`. `requireRole(...roles)` (`src/middleware/authorize.js`) runs after `authenticate` and answers 403 `FORBIDDEN` for any other role. `/api/v1/admin/*` is mounted behind `authenticate, requireRole('admin')`. Admins are created with `npm run make-admin -- <email>`. Because the role travels in the token, a promotion or demotion takes effect with the next access token, at most `ACCESS_TOKEN_TTL` later.
+- **Access token.** JWT, HS256, signed with `JWT_SECRET`, claims `sub`, `email`, `role`, lifetime `ACCESS_TOKEN_TTL` (default `15m`). Returned as `token` in the JSON of login, register and refresh and sent as `Authorization: Bearer <token>`. The client keeps it in memory only, never in `localStorage`.
+- **Refresh token.** 32 random bytes (`crypto.randomBytes`, base64url), lifetime `REFRESH_TOKEN_TTL_DAYS` (default 7). The database stores only its SHA-256 hash in `refresh_tokens`. It is sent as the cookie `refresh_token` with `HttpOnly`, `SameSite=Strict`, `Path=/api/v1/auth`, `Max-Age` equal to the lifetime, and `Secure` when `NODE_ENV=production`. The path keeps the cookie off every other request.
+- **Families and rotation.** Login and register start a new family (`family_id`, a random UUID). `POST /auth/refresh` locks the presented token's row (`SELECT ... FOR UPDATE`), revokes it, inserts its successor in the same family, links them with `replaced_by_id` and returns a new access token, all in one transaction. Unknown or expired tokens get 401.
+- **Reuse detection.** A refresh token that is already revoked can only be presented again if it was copied, so the server revokes every token in its family (committed before answering) and returns 401. Both the thief and the real user then have to log in again. The row lock means two concurrent refreshes of the same token count as reuse as well, so the client shares a single in-flight refresh request.
+- **Logout.** `POST /auth/logout` revokes the presented token and clears the cookie. It returns 204 whether or not a cookie was sent.
+- **CSRF defence.** Refresh and logout are the only endpoints authenticated by a cookie. They require the header `X-Requested-With: fetch`, which a cross-site form or link cannot set and which a cross-origin script can only send after a CORS preflight that only `CORS_ORIGINS` pass. When an `Origin` header is present it must equal the server's own origin or one of `CORS_ORIGINS`. Anything else gets 403 `FORBIDDEN`. `SameSite=Strict` is a second layer. Every other route uses the Bearer header, which browsers never attach on their own.
+- **Client flow.** On start the client calls `POST /auth/refresh` (`credentials: 'same-origin'`, `X-Requested-With: fetch`) to restore the session. Protected pages wait for that answer before deciding whether to redirect. On any 401 outside `/auth/*`, the API wrapper refreshes once and retries the request once. If the refresh fails it clears the session and goes to `/login`.
 
 ## 12. Folder structure (MVC)
 
@@ -238,11 +255,11 @@ Pawnprint/
   src/
     server.js, worker.js, app.js
     config/        env.js, db.js (Prisma + pg Pool)
-    routes/        v1/index.js, auth, accounts, imports, uploads, games, analytics, training
-    controllers/   auth, account, import, upload, game, analytics, training, health
-    services/      auth, account, import, upload, games, analytics, summary, training, drill, health
-    repositories/  user.repo.js, game.repo.js, training.repo.js (Prisma), moveBulk.repo.js, analytics.repo.js (pg)
-    middleware/    authenticate.js, errorHandler.js, requestLogger.js, rateLimit.js
+    routes/        v1/index.js, auth, accounts, imports, uploads, games, analytics, training, admin
+    controllers/   auth, account, import, upload, game, analytics, training, health, admin
+    services/      auth, session, account, import, upload, games, analytics, summary, training, drill, health, admin
+    repositories/  user.repo.js, game.repo.js, training.repo.js, refreshToken.repo.js, admin.repo.js (Prisma), moveBulk.repo.js, analytics.repo.js (pg)
+    middleware/    authenticate.js, authorize.js, csrf.js, errorHandler.js, requestLogger.js, rateLimit.js
     workers/       jobQueue.js, jobRunner.js, gameAnalyzer.js, engineRegistry.js, dataQuality.js, events.js
     chess/         pgnParser.js, stockfishClient.js, evalMath.js, phase.js, fen.js, motifs.js
     ingest/        lichessClient.js, chesscomClient.js, standardChess.js

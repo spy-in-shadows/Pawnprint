@@ -6,9 +6,9 @@ The complete DDL of the implemented schema is in [`schema.sql`](schema.sql). It 
 docker compose -p pawnprint-demo exec -T db pg_dump -U chess -d chess_analytics --schema-only --no-owner --no-privileges > DE/schema.sql
 ```
 
-after which the blocks of the Prisma bookkeeping table `_prisma_migrations` were removed (a short Python filter that drops every `-- Name:` block mentioning that table). The resulting file was checked by loading it into an empty database (`CREATE DATABASE schema_check`, then `psql -v ON_ERROR_STOP=1 -f DE/schema.sql`), which created the 24 tables without errors; the check database was dropped afterwards.
+after which the blocks of the Prisma bookkeeping table `_prisma_migrations` were removed (a short Python filter that drops every `-- Name:` block mentioning that table). The resulting file was checked by loading it into an empty database (`CREATE DATABASE schema_check`, then `psql -v ON_ERROR_STOP=1 -f DE/schema.sql`), which created the 25 tables without errors; the check database was dropped afterwards.
 
-The schema itself is defined in `prisma/schema.prisma` and created by the seven migrations in `prisma/migrations/`:
+The schema itself is defined in `prisma/schema.prisma` and created by the nine migrations in `prisma/migrations/`:
 
 | Migration | What it adds |
 |---|---|
@@ -19,13 +19,15 @@ The schema itself is defined in `prisma/schema.prisma` and created by the seven 
 | `20261114161727_analytics_indexes` | `idx_move_motifs_motif_id`, `idx_player_accounts_user_id` |
 | `20261114162509_account_summaries` | `account_summary`, `account_phase_summary` |
 | `20261122161952_add_check_constraints` | 37 `CHECK` constraints on value sets and ranges (hand-written SQL; see each table below) |
+| `20261124090000_user_roles` | `users.role` (`text NOT NULL DEFAULT 'user'`) and the CHECK constraint `users_role_check` |
+| `20261124100000_refresh_tokens` | `refresh_tokens` with its unique hash index, `user_id` and `family_id` indexes and its two foreign keys |
 
 General rules visible in every table:
 
 - Every table has a primary key; entity tables use a `SERIAL` integer `id`, one-to-one tables reuse `move_id` or `player_account_id`, link tables use a composite key.
 - Every foreign key has `ON UPDATE CASCADE` (the Prisma default). `ON DELETE` is `CASCADE` for ownership (user -> accounts -> games -> moves -> evaluations), `RESTRICT` for lookups that are still in use, and `SET NULL` for the optional lookups `games.opening_id`, `games.time_control_id` and `training_plan_items.motif_id`.
 - Timestamps are `timestamp(3) without time zone` holding UTC; raw SQL writes them with `(NOW() AT TIME ZONE 'UTC')` and `src/config/db.js` sets the `pg` driver to read and write them as UTC.
-- 37 `CHECK` constraints (migration `20261122161952_add_check_constraints`) restrict status and kind columns to their allowed values and keep counts, clocks, ratings and losses in range; they are listed per table below. Prisma does not model CHECK constraints, so they exist only in the migration SQL, with a comment above each affected model in `prisma/schema.prisma`.
+- 38 `CHECK` constraints (37 from migration `20261122161952_add_check_constraints`, plus `users_role_check` from `20261124090000_user_roles`) restrict status and kind columns to their allowed values and keep counts, clocks, ratings and losses in range; they are listed per table below. Prisma does not model CHECK constraints, so they exist only in the migration SQL, with a comment above each affected model in `prisma/schema.prisma`.
 
 ## Tables
 
@@ -39,12 +41,15 @@ Registered application users. `email` is stored lower-cased and trimmed by `norm
 | `email` | text | no |  |
 | `password_hash` | text | no |  |
 | `created_at` | timestamp(3) | no | `CURRENT_TIMESTAMP` |
+| `role` | text | no | `'user'` |
+
+`role` was added by migration `20261124090000_user_roles`; existing users became `user`, and `npm run make-admin -- <email>` promotes one to `admin`.
 
 - Primary key: `users_pkey` (id)
 - Foreign keys: none
 - Unique constraints: `users_email_key` (email)
-- Other constraints: NOT NULL on `id`, `email`, `password_hash`, `created_at`
-- CHECK constraints: none on this table
+- Other constraints: NOT NULL on `id`, `email`, `password_hash`, `created_at`, `role`
+- CHECK constraints: `users_role_check` `CHECK ((role = ANY (ARRAY['user'::text, 'admin'::text])))`
 - Indexes:
   - `users_email_key` btree (email): Unique email; login looks users up by email (`findByEmail`).
   - `users_pkey` btree (id): Primary key.
@@ -559,11 +564,39 @@ Precomputed moves, blunders and average loss for one account and phase. Derived;
 - Indexes:
   - `account_phase_summary_pkey` btree (player_account_id, phase_id): Primary key.
 
-## 4.25 Index strategy in one paragraph
+### 4.25 `refresh_tokens`
+
+Rotating refresh tokens (DESIGN.md section 11). Only the SHA-256 hash of a token is stored. Tokens from one login share `family_id`. Rotation revokes the old token and points `replaced_by_id` at its successor, and presenting a revoked token revokes the whole family. Added by migration `20261124100000_refresh_tokens`. The demo database holds only the tokens of sessions started since then.
+
+| Column | Type | Nullable | Default |
+|---|---|---|---|
+| `id` | integer | no | sequence (`SERIAL`) |
+| `user_id` | integer | no |  |
+| `token_hash` | text | no |  |
+| `family_id` | text | no |  |
+| `expires_at` | timestamp(3) | no |  |
+| `revoked_at` | timestamp(3) | yes |  |
+| `replaced_by_id` | integer | yes |  |
+| `created_at` | timestamp(3) | no | `CURRENT_TIMESTAMP` |
+
+- Primary key: `refresh_tokens_pkey` (id)
+- Foreign keys:
+  - `refresh_tokens_user_id_fkey`: `user_id` -> `users(id)`, ON DELETE CASCADE
+  - `refresh_tokens_replaced_by_id_fkey`: `replaced_by_id` -> `refresh_tokens(id)`, ON DELETE SET NULL
+- Unique constraints: `refresh_tokens_token_hash_key` (token_hash)
+- Other constraints: NOT NULL on `id`, `user_id`, `token_hash`, `family_id`, `expires_at`, `created_at`
+- CHECK constraints: none on this table
+- Indexes:
+  - `refresh_tokens_pkey` btree (id): Primary key.
+  - `refresh_tokens_token_hash_key` btree (token_hash): Unique; refresh and logout look a token up by its hash.
+  - `refresh_tokens_user_id_idx` btree (user_id): Finds a user's tokens, and supports the cascade when a user is deleted.
+  - `refresh_tokens_family_id_idx` btree (family_id): Reuse detection revokes every token of a family in one update.
+
+## 4.26 Index strategy in one paragraph
 
 Write-heavy move tables (`moves`, `move_evals`, `move_mates`, `move_classifications`) carry only their primary key, plus `UNIQUE(game_id, ply)` on `moves`, because every extra index slows the bulk inserts. Analytics reads are served by the composite index `games(player_account_id, played_at)`, the primary keys of the one-to-one tables (joins by `move_id`) and the summary tables. `docs/explain/README.md` records the before and after plans for the two indexes added in `20261114161727_analytics_indexes` and the rejected candidates (`move_classifications(classification_id)`, `moves(game_id, mover_color)`, secondary indexes on `move_evals` and `move_mates`). Indexes that are not present and could matter at larger sizes: `analysis_job_games(game_id)` (deleting a game has to find its job rows, and the primary key starts with `job_id`), `puzzle_motifs(motif_id)` (the puzzle selection for a motif filters on it) and `training_plans(user_id)`.
 
-## 4.26 Seed data
+## 4.27 Seed data
 
 `prisma/seed/index.js` (run with `npm run seed`) loads the lookup tables with Prisma `upsert` calls, so running it twice changes nothing:
 
