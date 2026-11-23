@@ -16,10 +16,12 @@ model Platform {
   @@map("platforms")
 }
 
+// CHECK constraint (migration 20261124090000_user_roles): users_role_check (role IN ('user', 'admin'))
 model User {
   id             Int             @id @default(autoincrement())
   email          String          @unique
   passwordHash   String          @map("password_hash")
+  role           String          @default("user")
   createdAt      DateTime        @default(now()) @map("created_at")
   playerAccounts PlayerAccount[]
   trainingPlans  TrainingPlan[]

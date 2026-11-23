@@ -15,7 +15,7 @@ export function normalizeEmail(email) {
 
 export function generateToken(user) {
   return jwt.sign(
-    { sub: user.id, email: user.email },
+    { sub: user.id, email: user.email, role: user.role ?? 'user' },
     config.jwtSecret,
     { expiresIn: config.jwtExpiresIn, algorithm: 'HS256' }
   );
@@ -58,7 +58,7 @@ export async function register(rawEmail, password) {
     throw err;
   }
 
-  const user = { id: created.id, email: created.email };
+  const user = { id: created.id, email: created.email, role: created.role };
   const token = generateToken(user);
 
   return { token, user };
@@ -82,7 +82,7 @@ export async function login(rawEmail, password) {
     throw new UnauthorizedError(INVALID_CREDENTIALS_MSG);
   }
 
-  const user = { id: userRecord.id, email: userRecord.email };
+  const user = { id: userRecord.id, email: userRecord.email, role: userRecord.role };
   const token = generateToken(user);
 
   return { token, user };
