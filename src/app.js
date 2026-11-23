@@ -3,6 +3,7 @@ import path from 'path';
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import config from './config/env.js';
 import v1Router from './routes/v1/index.js';
 import { requestLogger } from './middleware/requestLogger.js';
@@ -41,11 +42,13 @@ export function createApp(options = {}) {
   // list no cross-origin caller is allowed; same-origin requests from the served client are unaffected.
   // Auth uses Bearer tokens, not cookies, so credentials stay off.
   const allowedOrigins = new Set(options.corsOrigins ?? config.corsOrigins);
+  // The refresh/logout CSRF check accepts the same list (src/middleware/csrf.js).
+  app.locals.allowedOrigins = allowedOrigins;
   app.use(
     cors({
       origin: (origin, callback) => callback(null, Boolean(origin) && allowedOrigins.has(origin)),
       methods: ['GET', 'POST', 'PATCH', 'DELETE'],
-      allowedHeaders: ['Content-Type', 'Authorization'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
       credentials: false,
     })
   );
@@ -58,6 +61,7 @@ export function createApp(options = {}) {
 
   // 2. Body parser
   app.use(express.json({ limit: '1mb' }));
+  app.use(cookieParser());
 
   // 3. Rate limiters
   const apiLimiter = options.apiRateLimiter ?? apiRateLimiter;

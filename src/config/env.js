@@ -22,7 +22,9 @@ const config = {
   nodeEnv: process.env.NODE_ENV || 'development',
   databaseUrl: process.env.DATABASE_URL,
   jwtSecret: process.env.JWT_SECRET,
-  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
+  // Access tokens are short-lived JWTs; sessions last through rotating refresh tokens.
+  accessTokenTtl: process.env.ACCESS_TOKEN_TTL || '15m',
+  refreshTokenTtlDays: Number(process.env.REFRESH_TOKEN_TTL_DAYS) || 7,
   stockfishPath: process.env.STOCKFISH_PATH || '/opt/homebrew/bin/stockfish',
   engineDepth: Number(process.env.ENGINE_DEPTH) || 12,
   engineThreads: Number(process.env.ENGINE_THREADS) || 1,
